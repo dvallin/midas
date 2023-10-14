@@ -1,0 +1,29 @@
+{
+  "exclude": [
+    "**/*.spec.ts",
+    "node_modules",
+    "**/__snapshots__",
+    "build"
+  ],
+  "include": [
+    "./src"
+  ],
+  "compilerOptions": {
+    "outDir": "./build/",
+    "strict": true,
+    "moduleResolution": "Node",
+    "noImplicitAny": true,
+    "resolveJsonModule": true,
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "esnext",
+    "sourceMap": true,
+    "pretty": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "declaration": true
+  }
+}

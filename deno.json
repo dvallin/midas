@@ -1,0 +1,23 @@
+{
+  "lint": {
+    "exclude": [
+      "**/build",
+      "**/dist"
+    ],
+    "rules": {
+      "tags": [
+        "recommended"
+      ]
+    }
+  },
+  "fmt": {
+    "exclude": [
+      "**/build",
+      "**/dist",
+      "packages/**/__snapshots__"
+    ],
+    "semiColons": false,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  }
+}

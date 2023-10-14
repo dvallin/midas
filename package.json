@@ -1,0 +1,23 @@
+{
+  "name": "mira",
+  "version": "0.0.1",
+  "description": "typesafe middleware for about anything",
+  "scripts": {
+    "test": "TZ=UTC vitest",
+    "test:ci": "vitest run",
+    "clean": "rm -rf build dist",
+    "build": "rollup -c ./rollup.config.mjs"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.5",
+    "@rollup/plugin-json": "^6.0.1",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "rollup": "^4.0.2",
+    "rollup-plugin-typescript2": "^0.36.0",
+    "typescript": "5.1.6",
+    "vite": "4.4.4",
+    "vitest": "0.33.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

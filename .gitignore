@@ -1,0 +1,12 @@
+.envrc
+.direnv
+.vscode
+
+node_modules
+.idea
+
+build
+dist
+
+sql
+schemas
