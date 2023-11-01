@@ -1,46 +1,37 @@
 import { Awaitable } from './awaitable'
 import { Middleware } from './middleware'
 
-class Pipeline<TEvent, TResult, TContext, TBaseContext = TContext> {
+class Pipeline<TEvent, TContext, TBaseContext = TContext, TResult = never> {
   constructor(private readonly stack: Middleware[]) {}
 
-  use<TNextContext, TNextResult = TResult>(
+  use<TNextResult, TNextContext = TContext>(
     middleware: Middleware<TEvent, TNextResult, TNextContext, TContext>,
-  ): Pipeline<
-    TEvent,
-    TNextResult,
-    Omit<TContext, keyof TNextContext> & TNextContext,
-    TBaseContext
-  > {
+  ): Pipeline<TEvent, TNextContext, TBaseContext, TNextResult | TResult> {
     return new Pipeline([...this.stack, middleware] as Middleware[])
   }
 
   build(): (event: TEvent, context: TBaseContext) => Awaitable<TResult> {
-    function traverse<TEvent, TContext, TResult>(
-      event: TEvent,
-      context: TContext,
-      stack: Middleware[],
-    ): Awaitable<TResult> {
-      const [head, ...tail] = stack
-      return head(event, context as object, (c) => {
-        if (tail.length > 0) {
-          return traverse(
-            event,
-            c !== undefined ? { ...context, ...c } : context,
-            tail,
-          )
+    return (event, context) => {
+      const traverse = <TResult>(
+        ctx: unknown,
+        index: number,
+      ): Awaitable<TResult> => {
+        if (index < this.stack.length) {
+          const currentMiddleware = this.stack[index]
+          return currentMiddleware(event, ctx, (c) => traverse(c, index + 1))
+        } else {
+          throw new Error('no middleware left in pipeline.')
         }
-        throw new Error('no middleware left in pipeline.')
-      }) as Awaitable<TResult>
+      }
+      return traverse(context, 0)
     }
-    return (event, context) => traverse(event, context, this.stack)
+  }
+
+  run(event: TEvent, context: TBaseContext): Awaitable<TResult> {
+    return this.build()(event, context)
   }
 }
 
-export default function pipeline<
-  TEvent,
-  TResult = unknown,
-  TContext = unknown,
->() {
-  return new Pipeline<TEvent, TResult, TContext>([])
+export function pipeline<TEvent, TContext = {}>() {
+  return new Pipeline<TEvent, TContext>([])
 }
