@@ -1,4 +1,4 @@
-import { it, vi, expect } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { pipeline } from './pipeline'
 import { Middleware } from './middleware'
 

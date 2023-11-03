@@ -43,7 +43,7 @@ export class DynamoDbStorage {
   }
 
   write<T>(componentName: string, entityId: string, component: T) {
-    const lastModified = new Date().valueOf()
+    const lastModified = this.now()
     return this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.tableName,
@@ -62,7 +62,7 @@ export class DynamoDbStorage {
     current: T,
     previous: T | undefined = undefined,
   ): Promise<void> {
-    const lastModified = new Date().valueOf()
+    const lastModified = this.now()
     await this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.tableName,
@@ -81,17 +81,33 @@ export class DynamoDbStorage {
     })
   }
 
-  updates(componentName: string, startDate: Date) {
+  all(componentName: string) {
+    return this.client.query({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.tableName,
+      KeyConditionExpression: `componentName = :componentName`,
+      ExpressionAttributeValues: {
+        ':componentName': componentName,
+      },
+      ScanIndexForward: true,
+    })
+  }
+
+  updates(componentName: string, startDate: number, endDate?: number) {
     return this.client.query({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.tableName,
       IndexName: `${this.tableName}LastModifiedGSI`,
-      KeyConditionExpression: `componentName = :componentName and lastModified > :lastModified`,
+      KeyConditionExpression:
+        `componentName = :componentName and lastModified > :startDate ${
+          endDate ? 'and lastModified < :endDate' : ''
+        }`,
       ExpressionAttributeValues: {
         ':componentName': componentName,
-        ':lastModified': startDate.valueOf(),
+        ':startDate': startDate,
+        ':endDate': endDate,
       },
-      ScanIndexForward: false,
+      ScanIndexForward: true,
     })
   }
 
@@ -109,6 +125,43 @@ export class DynamoDbStorage {
       },
       ExpressionAttributeValues: {
         ':values': [component],
+      },
+      ConditionExpression: 'attribute_exists(component)',
+      ReturnValues: 'NONE',
+    })
+  }
+
+  add<T>(componentName: string, entityId: string, component: T) {
+    return this.client.update({
+      TableName: this.tableName,
+      Key: {
+        componentName,
+        entityId,
+      },
+      UpdateExpression: 'ADD #component.boxed :value',
+      ExpressionAttributeNames: {
+        '#component': 'component',
+      },
+      ExpressionAttributeValues: {
+        ':value': new Set([component]),
+      },
+      ConditionExpression: 'attribute_exists(component)',
+      ReturnValues: 'NONE',
+    })
+  }
+  delete<T>(componentName: string, entityId: string, component: T) {
+    return this.client.update({
+      TableName: this.tableName,
+      Key: {
+        componentName,
+        entityId,
+      },
+      UpdateExpression: 'DELETE #component.boxed :value',
+      ExpressionAttributeNames: {
+        '#component': 'component',
+      },
+      ExpressionAttributeValues: {
+        ':value': new Set([component]),
       },
       ConditionExpression: 'attribute_exists(component)',
       ReturnValues: 'NONE',
@@ -158,5 +211,9 @@ export class DynamoDbStorage {
         TableName: this.tableName,
       }),
     )
+  }
+
+  private now(): number {
+    return performance.timeOrigin + performance.now()
   }
 }

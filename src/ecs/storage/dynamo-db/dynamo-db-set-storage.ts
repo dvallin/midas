@@ -1,10 +1,10 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { ArrayStorage } from '..'
+import { SetStorage } from '..'
 import { DynamoDbComponentStorage } from './dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 
-export class DynamoDbArrayStorage<T> implements ArrayStorage<T> {
-  private readonly underlying: DynamoDbComponentStorage<{ boxed: T[] }>
+export class DynamoDbSetStorage<T> implements SetStorage<T> {
+  private readonly underlying: DynamoDbComponentStorage<{ boxed?: Set<T> }>
   constructor(
     protected componentName: string,
     protected storage: DynamoDbStorage,
@@ -14,11 +14,11 @@ export class DynamoDbArrayStorage<T> implements ArrayStorage<T> {
 
   async read(entityId: string): Promise<T[] | undefined> {
     const result = await this.underlying.read(entityId)
-    return result?.boxed
+    return result ? Array.from(result.boxed ?? []) : undefined
   }
 
   async write(entityId: string, component: T[]): Promise<void> {
-    await this.underlying.write(entityId, { boxed: component })
+    await this.underlying.write(entityId, { boxed: new Set(component) })
   }
 
   conditionalWrite(
@@ -28,8 +28,8 @@ export class DynamoDbArrayStorage<T> implements ArrayStorage<T> {
   ): Promise<void> {
     return this.underlying.conditionalWrite(
       entityId,
-      { boxed: current },
-      previous ? { boxed: previous } : undefined,
+      { boxed: new Set(current) },
+      previous ? { boxed: new Set(previous) } : undefined,
     )
   }
 
@@ -41,13 +41,16 @@ export class DynamoDbArrayStorage<T> implements ArrayStorage<T> {
     return this.underlying.updates(startDate, endDate)
   }
 
-  async push(entityId: string, component: T): Promise<void> {
+  async add(entityId: string, component: T): Promise<void> {
     try {
-      await this.storage.push(this.componentName, entityId, component)
+      await this.storage.add(this.componentName, entityId, component)
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
         return this.write(entityId, [component])
       }
     }
+  }
+  async delete(entityId: string, component: T): Promise<void> {
+    await this.storage.delete(this.componentName, entityId, component)
   }
 }

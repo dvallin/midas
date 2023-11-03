@@ -1,34 +1,12 @@
 import { DynamoDbComponentStorage } from './dynamo-db-component-storage'
-import { DynamoDbStorage } from './dynamo-db-storage'
 import componentStorageSpec from '../component-storage-spec'
 import productVariantsUsecase from '../../use-cases/product-variants'
-import { pipeline } from '../../../pipeline'
-import {
-  contextMixinMiddleware,
-  dynamoDbClientMiddleware,
-} from '../../../middleware'
 import { afterEach, beforeEach } from 'vitest'
+import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 
-let storage = await pipeline()
-  .use(
-    dynamoDbClientMiddleware({
-      region: 'us-east-1',
-      endpoint: process.env.LOCALSTACK_ENDPOINT,
-    }),
-  )
-  .use(
-    contextMixinMiddleware(() => ({
-      ecs: {
-        storage: {
-          dynamodb: {
-            config: { tableName: 'component-storage-test-components' },
-          },
-        },
-      },
-    })),
-  )
-  .use((_e, c) => new DynamoDbStorage(c))
-  .run({}, {})
+const storage = await createTestDynamoDbStorage(
+  'component-storage-test-components',
+)
 
 beforeEach(() => storage.migrate())
 afterEach(() => storage.teardown())

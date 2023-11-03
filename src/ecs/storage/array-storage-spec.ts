@@ -1,4 +1,4 @@
-import { it, expect, describe } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { ArrayStorage } from '.'
 
 export default function spec(provider: () => ArrayStorage<string>) {

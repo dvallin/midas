@@ -1,25 +1,33 @@
 import { ComponentStorage } from '../storage'
 
 export class Importer {
-  constructor(private readonly cursors: ComponentStorage<number>) {}
+  constructor(
+    private readonly cursors: ComponentStorage<number>,
+    private readonly maxClockSkewMs = 10000,
+  ) {}
 
   async runImport<T>(
-    name: string,
+    importName: string,
     storage: ComponentStorage<T>,
-    onEntity: (entity: string, value: T) => Promise<void>,
+    onEntity: (entityId: string, component: T) => Promise<void>,
   ) {
-    const cursor = (await this.cursors.read(name)) ?? -8640000000000000
-    let nextCursor = cursor
-    for await (const { entity, lastModified } of storage.updates(
-      new Date(cursor),
-    )) {
-      const value = await storage.read(entity)
+    const startDate = (await this.cursors.read(importName)) ?? -8640000000000000
+    const endDate = this.now() - this.maxClockSkewMs
+
+    let nextCursor = startDate
+    for await (const update of storage.updates(startDate, endDate)) {
+      const { entityId, lastModified } = update
+      const value = await storage.read(entityId)
       if (value === undefined) {
         throw new Error('could not find value for entity')
       }
-      await onEntity(entity, value)
-      nextCursor = Math.max(nextCursor, lastModified.valueOf())
+      await onEntity(entityId, value)
+      nextCursor = Math.max(nextCursor, lastModified)
     }
-    await this.cursors.write(name, nextCursor)
+    await this.cursors.write(importName, nextCursor)
+  }
+
+  private now(): number {
+    return performance.timeOrigin + performance.now()
   }
 }

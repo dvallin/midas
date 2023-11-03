@@ -10,13 +10,13 @@ type Cart = {
 }
 type CartEvent =
   | {
-      op: 'add'
-      item: CartItem
-    }
+    op: 'add'
+    item: CartItem
+  }
   | {
-      op: 'remove'
-      index: number
-    }
+    op: 'remove'
+    index: number
+  }
 
 export default function (
   provider: () => {

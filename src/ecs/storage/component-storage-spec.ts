@@ -1,4 +1,4 @@
-import { it, expect, describe } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { ComponentStorage } from '.'
 
 export type Product = { product: string }
@@ -9,6 +9,18 @@ export default function spec(provider: () => ComponentStorage<Product>) {
     const products = provider()
     await products.write('1', product)
     expect(await products.read('1')).toEqual(product)
+  })
+  it('returns all', async () => {
+    const product = { product: 'product-1' }
+    const products = provider()
+    await products.write('1', product)
+    await products.write('2', product)
+
+    const updates = []
+    for await (const { entityId } of products.all()) {
+      updates.push(entityId)
+    }
+    expect(updates).toEqual(['1', '2'])
   })
   it('collects updates', async () => {
     const product = { product: 'product-1' }
@@ -21,7 +33,7 @@ export default function spec(provider: () => ComponentStorage<Product>) {
     for await (const { entityId } of products.updates(new Date('2000-01-01'))) {
       updates.push(entityId)
     }
-    expect(updates).toEqual(['1', '2'])
+    expect(updates).toEqual(['2', '1'])
   })
 
   describe('conditional writes', () => {
