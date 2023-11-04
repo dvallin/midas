@@ -40,23 +40,22 @@ export class DynamoDbComponentStorage<T> implements ComponentStorage<T> {
     for (const item of result.Items ?? []) {
       yield {
         entityId: item.entityId,
-        lastModified: item.lastModified,
         component: item.component,
       }
     }
   }
 
-  async *updates(startDate: number, endDate?: number) {
-    const result = await this.storage.updates(
-      this.componentName,
-      startDate,
-      endDate,
-    )
+  async *updates(cursor: string) {
+    const result = await this.storage.updates(this.componentName, cursor)
     for (const item of result.Items ?? []) {
       yield {
         entityId: item.entityId,
-        lastModified: item.lastModified,
+        cursor: item.sequenceNumber,
       }
     }
+  }
+
+  commitUpdateIndex(): Promise<void> {
+    return this.storage.commitUpdateIndex()
   }
 }

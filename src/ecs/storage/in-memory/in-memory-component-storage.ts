@@ -42,18 +42,23 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     }
   }
 
-  async *updates(startDate: number, endDate?: number) {
+  async *updates(cursor: string) {
+    const startDate = parseInt(cursor)
     const result: { lastModified: number; entityId: string }[] = []
     for (const entityId of Object.keys(this.storage)) {
       const { lastModified } = this.storage[entityId]
-      if (lastModified > startDate && (!endDate || lastModified < endDate)) {
+      if (lastModified > startDate) {
         result.push({ entityId, lastModified })
       }
     }
     result.sort((a, b) => a.lastModified - b.lastModified)
     for (const { entityId, lastModified } of result) {
-      yield { entityId, lastModified }
+      yield { entityId, cursor: lastModified.toString() }
     }
+  }
+
+  commitUpdateIndex(): Promise<void> {
+    return Promise.resolve()
   }
 
   private now(): number {

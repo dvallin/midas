@@ -8,13 +8,10 @@ export interface ComponentStorage<T> {
   ): Promise<void>
   all(): AsyncGenerator<{
     entityId: string
-    lastModified: number
     component: T
   }>
-  updates(
-    startDate: number,
-    endDate?: number,
-  ): AsyncGenerator<{ entityId: string; lastModified: number }>
+  updates(cursor: string): AsyncGenerator<{ entityId: string; cursor: string }>
+  commitUpdateIndex(): Promise<void>
 }
 
 export interface ArrayStorage<T> extends ComponentStorage<T[]> {

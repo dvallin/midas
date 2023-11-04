@@ -5,6 +5,7 @@ import {
   DeleteTableCommand,
   ReturnConsumedCapacity,
 } from '@aws-sdk/client-dynamodb'
+import { DynamoDBStreams } from '@aws-sdk/client-dynamodb-streams'
 
 export type DynamoDbStorageContext = {
   ecs: {
@@ -21,10 +22,12 @@ export type DynamoDbStorageContext = {
 
 export class DynamoDbStorage {
   protected readonly client: DynamoDBDocument
+  protected readonly dynamoStreams: DynamoDBStreams
   protected readonly tableName: string
   protected readonly returnConsumedCapacity?: ReturnConsumedCapacity
   constructor(context: DynamoDbContext & DynamoDbStorageContext) {
     this.client = context.aws.dynamoDb
+    this.dynamoStreams = context.aws.dynamoStreams
     this.tableName = context.ecs.storage.dynamodb.config.tableName
     this.returnConsumedCapacity =
       context.ecs.storage.dynamodb.config.returnConsumedCapacity
@@ -43,7 +46,6 @@ export class DynamoDbStorage {
   }
 
   write<T>(componentName: string, entityId: string, component: T) {
-    const lastModified = this.now()
     return this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.tableName,
@@ -51,7 +53,6 @@ export class DynamoDbStorage {
         componentName,
         entityId,
         component,
-        lastModified,
       },
     })
   }
@@ -62,7 +63,6 @@ export class DynamoDbStorage {
     current: T,
     previous: T | undefined = undefined,
   ): Promise<void> {
-    const lastModified = this.now()
     await this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.tableName,
@@ -70,7 +70,6 @@ export class DynamoDbStorage {
         componentName,
         entityId,
         component: current,
-        lastModified,
       },
       ConditionExpression: previous
         ? 'component = :previousValue'
@@ -93,19 +92,15 @@ export class DynamoDbStorage {
     })
   }
 
-  updates(componentName: string, startDate: number, endDate?: number) {
-    return this.client.query({
+  async updates(componentName: string, cursor: string) {
+    return await this.client.query({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
-      TableName: this.tableName,
-      IndexName: `${this.tableName}LastModifiedGSI`,
-      KeyConditionExpression:
-        `componentName = :componentName and lastModified > :startDate ${
-          endDate ? 'and lastModified < :endDate' : ''
-        }`,
+      TableName: `${this.tableName}_updates`,
+      IndexName: `${this.tableName}_updates_sequenceNumbers`,
+      KeyConditionExpression: `componentName = :componentName and sequenceNumber > :cursor`,
       ExpressionAttributeValues: {
         ':componentName': componentName,
-        ':startDate': startDate,
-        ':endDate': endDate,
+        ':cursor': cursor,
       },
       ScanIndexForward: true,
     })
@@ -179,7 +174,29 @@ export class DynamoDbStorage {
         AttributeDefinitions: [
           { AttributeName: 'componentName', AttributeType: 'S' },
           { AttributeName: 'entityId', AttributeType: 'S' },
-          { AttributeName: 'lastModified', AttributeType: 'N' },
+        ],
+        ProvisionedThroughput: {
+          ReadCapacityUnits: 5,
+          WriteCapacityUnits: 5,
+        },
+        StreamSpecification: {
+          StreamEnabled: true,
+          StreamViewType: 'KEYS_ONLY',
+        },
+      }),
+    )
+
+    await this.client.send(
+      new CreateTableCommand({
+        TableName: `${this.tableName}_updates`,
+        KeySchema: [
+          { AttributeName: 'componentName', KeyType: 'HASH' },
+          { AttributeName: 'entityId', KeyType: 'RANGE' },
+        ],
+        AttributeDefinitions: [
+          { AttributeName: 'componentName', AttributeType: 'S' },
+          { AttributeName: 'entityId', AttributeType: 'S' },
+          { AttributeName: 'sequenceNumber', AttributeType: 'S' },
         ],
         ProvisionedThroughput: {
           ReadCapacityUnits: 5,
@@ -187,10 +204,10 @@ export class DynamoDbStorage {
         },
         GlobalSecondaryIndexes: [
           {
-            IndexName: `${this.tableName}LastModifiedGSI`,
+            IndexName: `${this.tableName}_updates_sequenceNumbers`,
             KeySchema: [
               { AttributeName: 'componentName', KeyType: 'HASH' },
-              { AttributeName: 'lastModified', KeyType: 'RANGE' },
+              { AttributeName: 'sequenceNumber', KeyType: 'RANGE' },
             ],
             Projection: {
               ProjectionType: 'KEYS_ONLY',
@@ -203,6 +220,64 @@ export class DynamoDbStorage {
         ],
       }),
     )
+
+    await this.awaitUpdateStream()
+  }
+
+  async awaitUpdateStream() {
+    const { Streams } = await this.dynamoStreams.listStreams({
+      TableName: this.tableName,
+    })
+    const arn = Streams?.[0].StreamArn
+    if (arn) {
+      let done = false
+      while (!done) {
+        const stream = await this.dynamoStreams.describeStream({
+          StreamArn: arn,
+        })
+        if (stream.StreamDescription?.StreamStatus === 'ENABLED') {
+          done = true
+        }
+      }
+    }
+  }
+
+  async commitUpdateIndex() {
+    const { Streams } = await this.dynamoStreams.listStreams({
+      TableName: this.tableName,
+    })
+    const arn = Streams?.[0].StreamArn
+    if (arn) {
+      const stream = await this.dynamoStreams.describeStream({
+        StreamArn: arn,
+      })
+      if (stream.StreamDescription?.StreamStatus !== 'ENABLED') {
+        throw new Error('stream not enabled')
+      }
+      const shard = stream.StreamDescription?.Shards?.[0]
+      if (shard) {
+        const iterator = await this.dynamoStreams.getShardIterator({
+          StreamArn: arn,
+          ShardId: shard.ShardId,
+          ShardIteratorType: 'AFTER_SEQUENCE_NUMBER',
+          SequenceNumber: shard.SequenceNumberRange?.StartingSequenceNumber,
+        })
+        const records = await this.dynamoStreams.getRecords({
+          ShardIterator: iterator.ShardIterator,
+        })
+        for (const record of records.Records ?? []) {
+          await this.client.put({
+            ReturnConsumedCapacity: this.returnConsumedCapacity,
+            TableName: `${this.tableName}_updates`,
+            Item: {
+              componentName: record.dynamodb?.Keys?.componentName.S,
+              entityId: record.dynamodb?.Keys?.entityId.S,
+              sequenceNumber: record.dynamodb?.SequenceNumber,
+            },
+          })
+        }
+      }
+    }
   }
 
   async teardown() {
@@ -211,9 +286,10 @@ export class DynamoDbStorage {
         TableName: this.tableName,
       }),
     )
-  }
-
-  private now(): number {
-    return performance.timeOrigin + performance.now()
+    await this.client.send(
+      new DeleteTableCommand({
+        TableName: `${this.tableName}_updates`,
+      }),
+    )
   }
 }

@@ -20,7 +20,7 @@ const schema = object({
 })
 
 it('imports zipped over multiple storages and according to schema', async () => {
-  const cursors = new InMemoryComponentStorage<number>()
+  const cursors = new InMemoryComponentStorage<string>()
   const importer = new ZipImporter(cursors)
 
   const imported = new InMemoryComponentStorage<InferType<typeof schema>>()
@@ -46,5 +46,5 @@ it('imports zipped over multiple storages and according to schema', async () => 
     storage: 'component-3',
     storage2: 'component-3',
   })
-  expect(cursors.data.test.component).toBeGreaterThan(0)
+  expect(parseInt(cursors.data.test.component)).toBeGreaterThan(0)
 })

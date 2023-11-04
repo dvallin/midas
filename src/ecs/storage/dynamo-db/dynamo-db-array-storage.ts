@@ -37,8 +37,12 @@ export class DynamoDbArrayStorage<T> implements ArrayStorage<T> {
     return this.underlying.all()
   }
 
-  updates(startDate: number, endDate?: number) {
-    return this.underlying.updates(startDate, endDate)
+  updates(cursor: string) {
+    return this.underlying.updates(cursor)
+  }
+
+  commitUpdateIndex(): Promise<void> {
+    return this.underlying.commitUpdateIndex()
   }
 
   async push(entityId: string, component: T): Promise<void> {

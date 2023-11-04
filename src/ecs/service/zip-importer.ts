@@ -2,10 +2,7 @@ import { ComponentStorage } from '../storage'
 import { Schema } from '@spaceteams/zap'
 
 export class ZipImporter {
-  constructor(
-    private readonly cursors: ComponentStorage<number>,
-    private readonly maxClockSkewMs = 1000,
-  ) {}
+  constructor(private readonly cursors: ComponentStorage<string>) {}
 
   async runImport<T>(
     importName: string,
@@ -13,15 +10,14 @@ export class ZipImporter {
     schema: Schema<T>,
     onEntity: (entityId: string, components: T) => Promise<void>,
   ) {
-    const startDate = (await this.cursors.read(importName)) ?? -8640000000000000
-    const endDate = this.now() - this.maxClockSkewMs
+    const startDate = (await this.cursors.read(importName)) ?? '0'
 
     let nextCursor = startDate
     const seen = new Set()
     for (const componentName of Object.keys(storages)) {
       const storage = storages[componentName]
-      for await (const update of storage.updates(startDate, endDate)) {
-        const { entityId, lastModified } = update
+      for await (const update of storage.updates(startDate)) {
+        const { entityId, cursor } = update
         if (seen.has(entityId)) {
           continue
         }
@@ -30,7 +26,8 @@ export class ZipImporter {
         const value = await this.getZipped(entityId, storages, schema)
         if (value) {
           await onEntity(entityId, value)
-          nextCursor = Math.max(nextCursor, lastModified)
+          nextCursor =
+            cursor.localeCompare(nextCursor) > 0 ? cursor : nextCursor
         }
       }
     }

@@ -24,6 +24,7 @@
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.429.0",
+    "@aws-sdk/client-dynamodb-streams": "^3.441.0",
     "@aws-sdk/client-s3": "^3.428.0",
     "@aws-sdk/lib-dynamodb": "^3.437.0",
     "@spaceteams/zap": "^0.3.3",

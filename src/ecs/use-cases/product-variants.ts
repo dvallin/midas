@@ -20,7 +20,7 @@ export default function (
     skus: ComponentStorage<SKU>
     variants: ComponentStorage<Variant>
     products: ComponentStorage<Product>
-    cursors: ComponentStorage<number>
+    cursors: ComponentStorage<string>
   },
 ) {
   describe('product-variants-usecase', () => {
@@ -41,6 +41,8 @@ export default function (
         parent: 'product-id',
         attributes: { color: 'red', size: 'l' },
       })
+
+      await skus.commitUpdateIndex()
 
       // when skus are updated we need to mix them into the product
       const importer = new Importer(cursors)

@@ -25,14 +25,18 @@ export default function spec(provider: () => ComponentStorage<Product>) {
   it('collects updates', async () => {
     const product = { product: 'product-1' }
     const products = provider()
+
     await products.write('1', product)
     await products.write('2', product)
     await products.write('1', product)
 
+    await products.commitUpdateIndex()
+
     const updates = []
-    for await (const { entityId } of products.updates(new Date('2000-01-01'))) {
+    for await (const { entityId } of products.updates('0')) {
       updates.push(entityId)
     }
+
     expect(updates).toEqual(['2', '1'])
   })
 
@@ -60,8 +64,14 @@ export default function spec(provider: () => ComponentStorage<Product>) {
     })
     it('writes if value is not present', async () => {
       const products = provider()
-      await products.conditionalWrite('1', { product: 'product-1' }, undefined)
-      expect(await products.read('1')).toEqual({ product: 'product-1' })
+      await products.conditionalWrite(
+        'not-present',
+        { product: 'product-1' },
+        undefined,
+      )
+      expect(await products.read('not-present')).toEqual({
+        product: 'product-1',
+      })
     })
     it('fails if value is is already there but not expected', async () => {
       const products = provider()

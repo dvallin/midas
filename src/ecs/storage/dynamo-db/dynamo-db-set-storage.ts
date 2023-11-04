@@ -37,8 +37,12 @@ export class DynamoDbSetStorage<T> implements SetStorage<T> {
     return this.underlying.all()
   }
 
-  updates(startDate: number, endDate?: number) {
-    return this.underlying.updates(startDate, endDate)
+  updates(cursor: string) {
+    return this.underlying.updates(cursor)
+  }
+
+  commitUpdateIndex(): Promise<void> {
+    return this.underlying.commitUpdateIndex()
   }
 
   async add(entityId: string, component: T): Promise<void> {

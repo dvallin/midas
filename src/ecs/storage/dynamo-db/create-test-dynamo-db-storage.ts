@@ -8,10 +8,13 @@ import { DynamoDbStorage } from './dynamo-db-storage'
 export function createTestDynamoDbStorage(tableName: string) {
   return pipeline()
     .use(
-      dynamoDbClientMiddleware({
-        region: 'us-east-1',
-        endpoint: process.env.LOCALSTACK_ENDPOINT,
-      }),
+      dynamoDbClientMiddleware(
+        {
+          region: 'us-east-1',
+          endpoint: process.env.LOCALSTACK_ENDPOINT,
+        },
+        { region: 'us-east-1', endpoint: process.env.LOCALSTACK_ENDPOINT },
+      ),
     )
     .use(
       contextMixinMiddleware(() => ({
