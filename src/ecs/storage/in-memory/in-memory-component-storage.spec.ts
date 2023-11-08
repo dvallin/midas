@@ -1,4 +1,5 @@
-import { InMemoryComponentStorage } from './in-memory-component-storage'
+import { InMemoryComponentStorage } from '.'
+
 import componentStorageSpec from '../component-storage-spec'
 import productVariantsUsecase from '../../use-cases/product-variants'
 

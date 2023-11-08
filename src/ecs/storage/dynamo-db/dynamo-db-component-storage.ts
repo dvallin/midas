@@ -1,61 +1,27 @@
 import { ComponentStorage } from '..'
-import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { DynamoDbStorage } from './dynamo-db-storage'
+import { Schema, json } from '@spaceteams/zap'
+import { parseThrowing } from './schema-parse'
+import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 
-export class DynamoDbComponentStorage<T> implements ComponentStorage<T> {
-  constructor(
-    protected componentName: string,
-    protected storage: DynamoDbStorage,
-  ) {}
-
-  read(entityId: string): Promise<T | undefined> {
-    return this.storage.read(this.componentName, entityId)
+export class DynamoDbComponentStorage<T>
+  extends AbstractDynamoDbComponentStorage<T, string>
+  implements ComponentStorage<T>
+{
+  constructor(componentName: string, storage: DynamoDbStorage) {
+    super(componentName, storage)
   }
 
-  async write(entityId: string, component: T): Promise<void> {
-    await this.storage.write(this.componentName, entityId, component)
+  encode(value: T): string {
+    return JSON.stringify(value)
   }
 
-  async conditionalWrite(
-    entityId: string,
-    current: T,
-    previous: T | undefined = undefined,
-  ): Promise<void> {
-    try {
-      return await this.storage.conditionalWrite(
-        this.componentName,
-        entityId,
-        current,
-        previous,
-      )
-    } catch (e) {
-      if (e instanceof ConditionalCheckFailedException) {
-        throw new Error('conditional write failed', e)
-      }
+  decode(value: string): T {
+    const schema = this.storage.getSchema(this.componentName)
+    if (schema === undefined) {
+      return JSON.parse(value)
     }
-  }
-
-  async *all() {
-    const result = await this.storage.all(this.componentName)
-    for (const item of result.Items ?? []) {
-      yield {
-        entityId: item.entityId,
-        component: item.component,
-      }
-    }
-  }
-
-  async *updates(cursor: string) {
-    const result = await this.storage.updates(this.componentName, cursor)
-    for (const item of result.Items ?? []) {
-      yield {
-        entityId: item.entityId,
-        cursor: item.sequenceNumber,
-      }
-    }
-  }
-
-  commitUpdateIndex(): Promise<void> {
-    return this.storage.commitUpdateIndex()
+    const parser = json(schema as Schema<T>)
+    return parseThrowing(parser, value)
   }
 }

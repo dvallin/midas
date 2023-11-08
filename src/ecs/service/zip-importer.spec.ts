@@ -19,19 +19,15 @@ const schema = object({
   storage3: optional(string()),
 })
 
-it('imports zipped over multiple storages and according to schema', async () => {
+it('imports zipped over multiple storages', async () => {
   const cursors = new InMemoryComponentStorage<string>()
   const importer = new ZipImporter(cursors)
 
   const imported = new InMemoryComponentStorage<InferType<typeof schema>>()
-  await importer.runImport(
+  await importer.runImportWithSchema(
     'test',
     { storage, storage2, storage3 },
-    object({
-      storage: string(),
-      storage2: string(),
-      storage3: optional(string()),
-    }),
+    schema,
     (entityId, component) => imported.write(entityId, component),
   )
 

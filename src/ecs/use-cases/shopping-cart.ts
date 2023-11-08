@@ -1,22 +1,33 @@
 import { describe, it } from 'vitest'
 import { ArrayStorage, ComponentStorage } from '../storage'
+import {
+  InferType,
+  array,
+  discriminatedUnion,
+  literal,
+  number,
+  object,
+  string,
+} from '@spaceteams/zap'
 
-type CartItem = {
-  productId: string
-  quantity: number
-}
-type Cart = {
-  items: CartItem[]
-}
-type CartEvent =
-  | {
-    op: 'add'
-    item: CartItem
-  }
-  | {
-    op: 'remove'
-    index: number
-  }
+export const CartItemSchema = object({
+  productId: string(),
+  quantity: number(),
+})
+
+export const CartSchema = object({
+  items: array(CartItemSchema),
+})
+
+export const CartEventSchema = discriminatedUnion(
+  'op',
+  object({ op: literal('add'), item: CartItemSchema }),
+  object({ op: literal('remove'), index: number() }),
+)
+
+export type Cart = InferType<typeof CartSchema>
+export type CartItem = InferType<typeof CartItemSchema>
+export type CartEvent = InferType<typeof CartEventSchema>
 
 export default function (
   provider: () => {
@@ -30,9 +41,9 @@ export default function (
 
       carts.write('1', { items: [] })
 
-      const cart = await carts.read('1')
+      const cart = await carts.readOrThrow('1')
       const updatedCart: Cart = {
-        items: [...(cart?.items ?? []), { productId: 'product1', quantity: 1 }],
+        items: [...cart.items, { productId: 'product1', quantity: 1 }],
       }
       await carts.conditionalWrite('1', updatedCart, cart)
     })
@@ -56,9 +67,9 @@ export default function (
         index: 0,
       })
 
-      const events = await cartEvents.read('1')
+      const events = await cartEvents.readOrThrow('1')
       let items: CartItem[] = []
-      for (const event of events ?? []) {
+      for (const event of events) {
         switch (event.op) {
           case 'add': {
             items.push(event.item)

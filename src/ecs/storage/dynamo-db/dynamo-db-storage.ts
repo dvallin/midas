@@ -2,10 +2,12 @@ import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb'
 import { DynamoDbContext } from '../../../middleware'
 import {
   CreateTableCommand,
+  CreateTableCommandInput,
   DeleteTableCommand,
   ReturnConsumedCapacity,
 } from '@aws-sdk/client-dynamodb'
 import { DynamoDBStreams } from '@aws-sdk/client-dynamodb-streams'
+import { Schema } from '@spaceteams/zap'
 
 export type DynamoDbStorageContext = {
   ecs: {
@@ -13,8 +15,14 @@ export type DynamoDbStorageContext = {
       dynamodb: {
         config: {
           returnConsumedCapacity?: ReturnConsumedCapacity
-          tableName: string
         }
+      }
+    }
+    components: {
+      [name: string]: {
+        type: 'key' | 'set' | 'array' | 'default'
+        tracksUpdates: boolean
+        schema?: Schema<unknown>
       }
     }
   }
@@ -23,32 +31,49 @@ export type DynamoDbStorageContext = {
 export class DynamoDbStorage {
   protected readonly client: DynamoDBDocument
   protected readonly dynamoStreams: DynamoDBStreams
-  protected readonly tableName: string
+  protected readonly components: DynamoDbStorageContext['ecs']['components']
   protected readonly returnConsumedCapacity?: ReturnConsumedCapacity
   constructor(context: DynamoDbContext & DynamoDbStorageContext) {
     this.client = context.aws.dynamoDb
     this.dynamoStreams = context.aws.dynamoStreams
-    this.tableName = context.ecs.storage.dynamodb.config.tableName
+    this.components = context.ecs.components
     this.returnConsumedCapacity =
       context.ecs.storage.dynamodb.config.returnConsumedCapacity
   }
 
-  async read<T>(
+  getTableName(componentName: string) {
+    return `components_${componentName}`
+  }
+  getUpdateTableName(componentName: string) {
+    return `components_${componentName}_updates`
+  }
+  getUpdateTableSequenceNumberIndexName(componentName: string) {
+    return `components_${componentName}_updates_sequenceNumbers`
+  }
+  getKeyedTableComponentIndexName(componentName: string) {
+    return `components_${componentName}_keys`
+  }
+
+  getSchema(componentName: string) {
+    return this.components[componentName].schema
+  }
+
+  async read(
     componentName: string,
     entityId: string,
-  ): Promise<T | undefined> {
+  ): Promise<unknown | undefined> {
     const result = await this.client.get({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       Key: { componentName, entityId },
     })
     return result.Item?.component
   }
 
-  write<T>(componentName: string, entityId: string, component: T) {
+  write(componentName: string, entityId: string, component: unknown) {
     return this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       Item: {
         componentName,
         entityId,
@@ -57,15 +82,36 @@ export class DynamoDbStorage {
     })
   }
 
-  async conditionalWrite<T>(
+  async getByKey(componentName: string, key: string) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'key') {
+      throw new Error(
+        `cannot perform a get by key on component ${componentName} of type ${componentType}`,
+      )
+    }
+    const result = await this.client.query({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      IndexName: this.getKeyedTableComponentIndexName(componentName),
+      KeyConditionExpression: `componentName = :componentName and component = :component`,
+      ExpressionAttributeValues: {
+        ':componentName': componentName,
+        ':component': key,
+      },
+      ScanIndexForward: true,
+    })
+    return result.Items?.[0]?.entityId
+  }
+
+  async conditionalWrite(
     componentName: string,
     entityId: string,
-    current: T,
-    previous: T | undefined = undefined,
+    current: unknown,
+    previous: unknown | undefined = undefined,
   ): Promise<void> {
     await this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       Item: {
         componentName,
         entityId,
@@ -83,7 +129,7 @@ export class DynamoDbStorage {
   all(componentName: string) {
     return this.client.query({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       KeyConditionExpression: `componentName = :componentName`,
       ExpressionAttributeValues: {
         ':componentName': componentName,
@@ -93,10 +139,16 @@ export class DynamoDbStorage {
   }
 
   async updates(componentName: string, cursor: string) {
+    const tracksUpdates = this.components[componentName].tracksUpdates
+    if (!tracksUpdates) {
+      throw new Error(
+        `component ${componentName} does not support update tracking`,
+      )
+    }
     return await this.client.query({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
-      TableName: `${this.tableName}_updates`,
-      IndexName: `${this.tableName}_updates_sequenceNumbers`,
+      TableName: this.getUpdateTableName(componentName),
+      IndexName: this.getUpdateTableSequenceNumberIndexName(componentName),
       KeyConditionExpression: `componentName = :componentName and sequenceNumber > :cursor`,
       ExpressionAttributeValues: {
         ':componentName': componentName,
@@ -106,9 +158,15 @@ export class DynamoDbStorage {
     })
   }
 
-  push<T>(componentName: string, entityId: string, component: T) {
+  push(componentName: string, entityId: string, component: unknown) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'array') {
+      throw new Error(
+        `cannot perform a array:push on component ${componentName} of type ${componentType}`,
+      )
+    }
     return this.client.update({
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       Key: {
         componentName,
         entityId,
@@ -126,9 +184,15 @@ export class DynamoDbStorage {
     })
   }
 
-  add<T>(componentName: string, entityId: string, component: T) {
+  add(componentName: string, entityId: string, component: unknown) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'set') {
+      throw new Error(
+        `cannot perform a setadd on component ${componentName} of type ${componentType}`,
+      )
+    }
     return this.client.update({
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       Key: {
         componentName,
         entityId,
@@ -144,9 +208,16 @@ export class DynamoDbStorage {
       ReturnValues: 'NONE',
     })
   }
-  delete<T>(componentName: string, entityId: string, component: T) {
+
+  delete(componentName: string, entityId: string, component: unknown) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'set') {
+      throw new Error(
+        `cannot perform a set delete on component ${componentName} of type ${componentType}`,
+      )
+    }
     return this.client.update({
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
       Key: {
         componentName,
         entityId,
@@ -163,77 +234,135 @@ export class DynamoDbStorage {
     })
   }
 
-  async migrate() {
-    await this.client.send(
-      new CreateTableCommand({
-        TableName: this.tableName,
-        KeySchema: [
-          { AttributeName: 'componentName', KeyType: 'HASH' },
-          { AttributeName: 'entityId', KeyType: 'RANGE' },
-        ],
-        AttributeDefinitions: [
-          { AttributeName: 'componentName', AttributeType: 'S' },
-          { AttributeName: 'entityId', AttributeType: 'S' },
-        ],
-        ProvisionedThroughput: {
-          ReadCapacityUnits: 5,
-          WriteCapacityUnits: 5,
-        },
-        StreamSpecification: {
-          StreamEnabled: true,
-          StreamViewType: 'KEYS_ONLY',
-        },
-      }),
-    )
-
-    await this.client.send(
-      new CreateTableCommand({
-        TableName: `${this.tableName}_updates`,
-        KeySchema: [
-          { AttributeName: 'componentName', KeyType: 'HASH' },
-          { AttributeName: 'entityId', KeyType: 'RANGE' },
-        ],
-        AttributeDefinitions: [
-          { AttributeName: 'componentName', AttributeType: 'S' },
-          { AttributeName: 'entityId', AttributeType: 'S' },
-          { AttributeName: 'sequenceNumber', AttributeType: 'S' },
-        ],
-        ProvisionedThroughput: {
-          ReadCapacityUnits: 5,
-          WriteCapacityUnits: 5,
-        },
-        GlobalSecondaryIndexes: [
-          {
-            IndexName: `${this.tableName}_updates_sequenceNumbers`,
-            KeySchema: [
-              { AttributeName: 'componentName', KeyType: 'HASH' },
-              { AttributeName: 'sequenceNumber', KeyType: 'RANGE' },
-            ],
-            Projection: {
-              ProjectionType: 'KEYS_ONLY',
-            },
-            ProvisionedThroughput: {
-              ReadCapacityUnits: 5,
-              WriteCapacityUnits: 5,
-            },
-          },
-        ],
-      }),
-    )
-
-    await this.awaitUpdateStream()
+  defaultPrimaryTableMigration(componentName: string): CreateTableCommandInput {
+    return {
+      TableName: this.getTableName(componentName),
+      KeySchema: [
+        { AttributeName: 'componentName', KeyType: 'HASH' },
+        { AttributeName: 'entityId', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'componentName', AttributeType: 'S' },
+        { AttributeName: 'entityId', AttributeType: 'S' },
+      ],
+      ProvisionedThroughput: {
+        ReadCapacityUnits: 5,
+        WriteCapacityUnits: 5,
+      },
+    }
   }
 
-  async awaitUpdateStream() {
-    const { Streams } = await this.dynamoStreams.listStreams({
-      TableName: this.tableName,
-    })
-    const arn = Streams?.[0].StreamArn
-    if (arn) {
-      let done = false
-      while (!done) {
+  keyedPrimaryTableMigration(componentName: string): CreateTableCommandInput {
+    return {
+      TableName: this.getTableName(componentName),
+      KeySchema: [
+        { AttributeName: 'componentName', KeyType: 'HASH' },
+        { AttributeName: 'entityId', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'componentName', AttributeType: 'S' },
+        { AttributeName: 'entityId', AttributeType: 'S' },
+        { AttributeName: 'component', AttributeType: 'S' },
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: this.getKeyedTableComponentIndexName(componentName),
+          KeySchema: [
+            { AttributeName: 'componentName', KeyType: 'HASH' },
+            { AttributeName: 'component', KeyType: 'RANGE' },
+          ],
+          Projection: {
+            ProjectionType: 'KEYS_ONLY',
+          },
+          ProvisionedThroughput: {
+            ReadCapacityUnits: 5,
+            WriteCapacityUnits: 5,
+          },
+        },
+      ],
+      ProvisionedThroughput: {
+        ReadCapacityUnits: 5,
+        WriteCapacityUnits: 5,
+      },
+    }
+  }
+
+  updateTableMigration(componentName: string): CreateTableCommandInput {
+    return {
+      TableName: this.getUpdateTableName(componentName),
+      KeySchema: [
+        { AttributeName: 'componentName', KeyType: 'HASH' },
+        { AttributeName: 'entityId', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'componentName', AttributeType: 'S' },
+        { AttributeName: 'entityId', AttributeType: 'S' },
+        { AttributeName: 'sequenceNumber', AttributeType: 'S' },
+      ],
+      ProvisionedThroughput: {
+        ReadCapacityUnits: 5,
+        WriteCapacityUnits: 5,
+      },
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: this.getUpdateTableSequenceNumberIndexName(componentName),
+          KeySchema: [
+            { AttributeName: 'componentName', KeyType: 'HASH' },
+            { AttributeName: 'sequenceNumber', KeyType: 'RANGE' },
+          ],
+          Projection: {
+            ProjectionType: 'KEYS_ONLY',
+          },
+          ProvisionedThroughput: {
+            ReadCapacityUnits: 5,
+            WriteCapacityUnits: 5,
+          },
+        },
+      ],
+    }
+  }
+
+  async migrate() {
+    for (const componentName of Object.keys(this.components)) {
+      const { type, tracksUpdates } = this.components[componentName]
+      let primaryTable: CreateTableCommandInput
+      switch (type) {
+        case 'array':
+        case 'default':
+        case 'set':
+          primaryTable = this.defaultPrimaryTableMigration(componentName)
+          break
+        case 'key':
+          primaryTable = this.keyedPrimaryTableMigration(componentName)
+          break
+      }
+
+      let updateTable: CreateTableCommandInput | undefined
+      if (tracksUpdates) {
+        primaryTable.StreamSpecification = {
+          StreamEnabled: true,
+          StreamViewType: 'KEYS_ONLY',
+        }
+        updateTable = this.updateTableMigration(componentName)
+      }
+
+      await this.client.send(new CreateTableCommand(primaryTable))
+      if (updateTable) {
+        await this.client.send(new CreateTableCommand(updateTable))
+        await this.awaitUpdateStreams(componentName)
+      }
+    }
+  }
+
+  async awaitUpdateStreams(componentName: string) {
+    let done = false
+    while (!done) {
+      const { Streams } = await this.dynamoStreams.listStreams({
+        TableName: this.getTableName(componentName),
+      })
+      for (const { StreamArn } of Streams ?? []) {
         const stream = await this.dynamoStreams.describeStream({
-          StreamArn: arn,
+          StreamArn,
         })
         if (stream.StreamDescription?.StreamStatus === 'ENABLED') {
           done = true
@@ -242,14 +371,13 @@ export class DynamoDbStorage {
     }
   }
 
-  async commitUpdateIndex() {
+  async commitUpdateIndex(componentName: string) {
     const { Streams } = await this.dynamoStreams.listStreams({
-      TableName: this.tableName,
+      TableName: this.getTableName(componentName),
     })
-    const arn = Streams?.[0].StreamArn
-    if (arn) {
+    for (const { StreamArn } of Streams ?? []) {
       const stream = await this.dynamoStreams.describeStream({
-        StreamArn: arn,
+        StreamArn,
       })
       if (stream.StreamDescription?.StreamStatus !== 'ENABLED') {
         throw new Error('stream not enabled')
@@ -257,7 +385,7 @@ export class DynamoDbStorage {
       const shard = stream.StreamDescription?.Shards?.[0]
       if (shard) {
         const iterator = await this.dynamoStreams.getShardIterator({
-          StreamArn: arn,
+          StreamArn,
           ShardId: shard.ShardId,
           ShardIteratorType: 'AFTER_SEQUENCE_NUMBER',
           SequenceNumber: shard.SequenceNumberRange?.StartingSequenceNumber,
@@ -268,7 +396,7 @@ export class DynamoDbStorage {
         for (const record of records.Records ?? []) {
           await this.client.put({
             ReturnConsumedCapacity: this.returnConsumedCapacity,
-            TableName: `${this.tableName}_updates`,
+            TableName: this.getUpdateTableName(componentName),
             Item: {
               componentName: record.dynamodb?.Keys?.componentName.S,
               entityId: record.dynamodb?.Keys?.entityId.S,
@@ -281,15 +409,20 @@ export class DynamoDbStorage {
   }
 
   async teardown() {
-    await this.client.send(
-      new DeleteTableCommand({
-        TableName: this.tableName,
-      }),
-    )
-    await this.client.send(
-      new DeleteTableCommand({
-        TableName: `${this.tableName}_updates`,
-      }),
-    )
+    for (const componentName of Object.keys(this.components)) {
+      const { tracksUpdates } = this.components[componentName]
+      await this.client.send(
+        new DeleteTableCommand({
+          TableName: this.getTableName(componentName),
+        }),
+      )
+      if (tracksUpdates) {
+        await this.client.send(
+          new DeleteTableCommand({
+            TableName: this.getUpdateTableName(componentName),
+          }),
+        )
+      }
+    }
   }
 }

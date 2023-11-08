@@ -1,60 +1,60 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { SetStorage } from '..'
-import { DynamoDbComponentStorage } from './dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
+import { Schema, json } from '@spaceteams/zap'
+import { parseThrowing } from './schema-parse'
+import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 
-export class DynamoDbSetStorage<T> implements SetStorage<T> {
-  private readonly underlying: DynamoDbComponentStorage<{ boxed?: Set<T> }>
-  constructor(
-    protected componentName: string,
-    protected storage: DynamoDbStorage,
-  ) {
-    this.underlying = new DynamoDbComponentStorage(componentName, storage)
+export class DynamoDbSetStorage<T>
+  extends AbstractDynamoDbComponentStorage<T[], { boxed: Set<string> }>
+  implements SetStorage<T>
+{
+  constructor(componentName: string, storage: DynamoDbStorage) {
+    super(componentName, storage)
   }
 
-  async read(entityId: string): Promise<T[] | undefined> {
-    const result = await this.underlying.read(entityId)
-    return result ? Array.from(result.boxed ?? []) : undefined
+  encode(value: T[]): { boxed: Set<string> } {
+    return { boxed: new Set(value.map((v) => JSON.stringify(v))) }
   }
 
-  async write(entityId: string, component: T[]): Promise<void> {
-    await this.underlying.write(entityId, { boxed: new Set(component) })
-  }
-
-  conditionalWrite(
-    entityId: string,
-    current: T[],
-    previous: T[] | undefined,
-  ): Promise<void> {
-    return this.underlying.conditionalWrite(
-      entityId,
-      { boxed: new Set(current) },
-      previous ? { boxed: new Set(previous) } : undefined,
-    )
-  }
-
-  all() {
-    return this.underlying.all()
-  }
-
-  updates(cursor: string) {
-    return this.underlying.updates(cursor)
-  }
-
-  commitUpdateIndex(): Promise<void> {
-    return this.underlying.commitUpdateIndex()
+  decode(value: { boxed?: Set<string> }): T[] {
+    const schema = this.storage.getSchema(this.componentName)
+    if (schema === undefined) {
+      const result: T[] = []
+      for (const v of value.boxed ?? []) {
+        result.push(JSON.parse(v))
+      }
+      return result
+    }
+    const parser = json(schema as Schema<T>)
+    const result: T[] = []
+    for (const v of value.boxed ?? []) {
+      result.push(parseThrowing(parser, v))
+    }
+    return result
   }
 
   async add(entityId: string, component: T): Promise<void> {
     try {
-      await this.storage.add(this.componentName, entityId, component)
+      await this.storage.add(
+        this.componentName,
+        entityId,
+        JSON.stringify(component),
+      )
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
         return this.write(entityId, [component])
+      } else {
+        throw e
       }
     }
   }
+
   async delete(entityId: string, component: T): Promise<void> {
-    await this.storage.delete(this.componentName, entityId, component)
+    await this.storage.delete(
+      this.componentName,
+      entityId,
+      JSON.stringify(component),
+    )
   }
 }

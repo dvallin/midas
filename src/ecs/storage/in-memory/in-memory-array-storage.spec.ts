@@ -1,7 +1,7 @@
-import { InMemoryArrayStorage } from './in-memory-array-storage'
+import { InMemoryArrayStorage, InMemoryComponentStorage } from '.'
+
 import arrayStorageSpec from '../array-storage-spec'
 import shoppingCartUsecase from '../../use-cases/shopping-cart'
-import { InMemoryComponentStorage } from '.'
 
 arrayStorageSpec(() => new InMemoryArrayStorage())
 shoppingCartUsecase(() => ({

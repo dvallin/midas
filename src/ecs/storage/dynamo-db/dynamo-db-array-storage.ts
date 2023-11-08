@@ -1,56 +1,43 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { ArrayStorage } from '..'
-import { DynamoDbComponentStorage } from './dynamo-db-component-storage'
+import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
+import { Schema, json } from '@spaceteams/zap'
+import { parseThrowing } from './schema-parse'
 
-export class DynamoDbArrayStorage<T> implements ArrayStorage<T> {
-  private readonly underlying: DynamoDbComponentStorage<{ boxed: T[] }>
-  constructor(
-    protected componentName: string,
-    protected storage: DynamoDbStorage,
-  ) {
-    this.underlying = new DynamoDbComponentStorage(componentName, storage)
+export class DynamoDbArrayStorage<T>
+  extends AbstractDynamoDbComponentStorage<T[], { boxed: string[] }>
+  implements ArrayStorage<T>
+{
+  constructor(componentName: string, storage: DynamoDbStorage) {
+    super(componentName, storage)
   }
 
-  async read(entityId: string): Promise<T[] | undefined> {
-    const result = await this.underlying.read(entityId)
-    return result?.boxed
+  encode(value: T[]): { boxed: string[] } {
+    return { boxed: value.map((v) => JSON.stringify(v)) }
   }
 
-  async write(entityId: string, component: T[]): Promise<void> {
-    await this.underlying.write(entityId, { boxed: component })
-  }
-
-  conditionalWrite(
-    entityId: string,
-    current: T[],
-    previous: T[] | undefined,
-  ): Promise<void> {
-    return this.underlying.conditionalWrite(
-      entityId,
-      { boxed: current },
-      previous ? { boxed: previous } : undefined,
-    )
-  }
-
-  all() {
-    return this.underlying.all()
-  }
-
-  updates(cursor: string) {
-    return this.underlying.updates(cursor)
-  }
-
-  commitUpdateIndex(): Promise<void> {
-    return this.underlying.commitUpdateIndex()
+  decode(value: { boxed: string[] }): T[] {
+    const schema = this.storage.getSchema(this.componentName)
+    if (schema === undefined) {
+      return value.boxed.map((v) => JSON.parse(v))
+    }
+    const parser = json(schema as Schema<T>)
+    return value.boxed.map((v) => parseThrowing(parser, v))
   }
 
   async push(entityId: string, component: T): Promise<void> {
     try {
-      await this.storage.push(this.componentName, entityId, component)
+      await this.storage.push(
+        this.componentName,
+        entityId,
+        JSON.stringify(component),
+      )
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
         return this.write(entityId, [component])
+      } else {
+        throw e
       }
     }
   }

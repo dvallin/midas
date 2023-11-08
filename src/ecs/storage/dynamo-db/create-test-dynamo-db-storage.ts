@@ -3,9 +3,11 @@ import {
   dynamoDbClientMiddleware,
 } from '../../../middleware'
 import { pipeline } from '../../../pipeline'
-import { DynamoDbStorage } from './dynamo-db-storage'
+import { DynamoDbStorage, DynamoDbStorageContext } from './dynamo-db-storage'
 
-export function createTestDynamoDbStorage(tableName: string) {
+export function createTestDynamoDbStorage(
+  components: DynamoDbStorageContext['ecs']['components'],
+) {
   return pipeline()
     .use(
       dynamoDbClientMiddleware(
@@ -21,9 +23,10 @@ export function createTestDynamoDbStorage(tableName: string) {
         ecs: {
           storage: {
             dynamodb: {
-              config: { tableName },
+              config: {},
             },
           },
+          components,
         },
       })),
     )

@@ -3,14 +3,19 @@ import productCategoriesUsecase from '../../use-cases/product-categories'
 import { beforeAll, afterAll } from 'vitest'
 import { InMemoryComponentStorage } from '../in-memory'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
-import spec from '../set-storage-spec'
+import setStorageSpec from '../set-storage-spec'
+import { string } from '@spaceteams/zap'
 
-const storage = await createTestDynamoDbStorage('set-storage-test-components')
+const storage = await createTestDynamoDbStorage({
+  setStorageSpec: { type: 'set', tracksUpdates: false, schema: string() },
+  productToCategories: { type: 'set', tracksUpdates: false, schema: string() },
+  categoryToProducts: { type: 'set', tracksUpdates: false, schema: string() },
+})
 
 beforeAll(() => storage.migrate())
 afterAll(() => storage.teardown())
 
-spec(() => new DynamoDbSetStorage('test', storage))
+setStorageSpec(() => new DynamoDbSetStorage('setStorageSpec', storage))
 productCategoriesUsecase(() => ({
   categories: new InMemoryComponentStorage(),
   productToCategories: new DynamoDbSetStorage('productToCategories', storage),

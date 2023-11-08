@@ -1,14 +1,16 @@
-import { ComponentStorage } from '../storage'
 import { Schema } from '@spaceteams/zap'
+import { ComponentStorage } from '../storage'
+import { GetResult, getById } from './get-by-id'
 
 export class ZipImporter {
   constructor(private readonly cursors: ComponentStorage<string>) {}
 
-  async runImport<T>(
+  async runImport<
+    T extends { [componentName: string]: ComponentStorage<unknown> },
+  >(
     importName: string,
-    storages: { [componentName: string]: ComponentStorage<unknown> },
-    schema: Schema<T>,
-    onEntity: (entityId: string, components: T) => Promise<void>,
+    storages: T,
+    onEntity: (entityId: string, components: GetResult<T>) => Promise<void>,
   ) {
     const startDate = (await this.cursors.read(importName)) ?? '0'
 
@@ -23,7 +25,7 @@ export class ZipImporter {
         }
         seen.add(entityId)
 
-        const value = await this.getZipped(entityId, storages, schema)
+        const value = await getById(entityId, storages)
         if (value) {
           await onEntity(entityId, value)
           nextCursor =
@@ -34,19 +36,25 @@ export class ZipImporter {
     await this.cursors.write(importName, nextCursor)
   }
 
-  async getZipped<T>(
-    entityId: string,
-    storages: { [componentName: string]: ComponentStorage<unknown> },
-    schema: Schema<T>,
+  runImportWithSchema<
+    T extends { [componentName: string]: ComponentStorage<unknown> },
+    I,
+    O = I,
+  >(
+    importName: string,
+    storages: T,
+    schema: Schema<I, O>,
+    onEntity: (entityId: string, components: O) => Promise<void>,
   ) {
-    const value: Record<string, unknown> = {}
-    for (const componentName of Object.keys(storages)) {
-      value[componentName] = await storages[componentName].read(entityId)
-    }
-    return schema.parse(value).parsedValue
-  }
-
-  private now(): number {
-    return performance.timeOrigin + performance.now()
+    return this.runImport(
+      importName,
+      storages,
+      async (entityId, components) => {
+        const { parsedValue } = schema.parse(components)
+        if (parsedValue) {
+          await onEntity(entityId, parsedValue)
+        }
+      },
+    )
   }
 }
