@@ -50,8 +50,6 @@ export default function (
         attributes: { color: 'red', size: 'l' },
       })
 
-      await skus.commitUpdateIndex()
-
       // when skus are updated we need to mix them into the product
       const importer = new Importer(cursors)
       await importer.runImport(

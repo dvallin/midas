@@ -34,13 +34,14 @@ export class DynamoDbSetStorage<T>
     return result
   }
 
-  async add(entityId: string, component: T): Promise<void> {
+  async add(entityId: string, component: T): Promise<{ cursor: string }> {
     try {
-      await this.storage.add(
+      const lastModified = await this.storage.add(
         this.componentName,
         entityId,
         JSON.stringify(component),
       )
+      return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
         return this.write(entityId, [component])
@@ -50,11 +51,12 @@ export class DynamoDbSetStorage<T>
     }
   }
 
-  async delete(entityId: string, component: T): Promise<void> {
-    await this.storage.delete(
+  async delete(entityId: string, component: T): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.delete(
       this.componentName,
       entityId,
       JSON.stringify(component),
     )
+    return { cursor: lastModified.toString() }
   }
 }

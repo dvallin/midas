@@ -25,5 +25,4 @@ export type ContextExtensionMiddleware<
 > = Middleware<TEvent, TResult, TBaseContext & TContext, TBaseContext>
 
 export * from './await-middleware'
-export * from './context-mixin-middleware'
 export * from './aws'

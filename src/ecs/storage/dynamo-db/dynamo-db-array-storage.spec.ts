@@ -8,7 +8,7 @@ import { InMemoryComponentStorage } from '../in-memory'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import { string } from '@spaceteams/zap'
 
-const storage = await createTestDynamoDbStorage({
+const { storage } = await createTestDynamoDbStorage('dynamo-db-array-storage', {
   arrayStorageSpec: { type: 'array', tracksUpdates: false, schema: string() },
   cartEvents: { type: 'array', tracksUpdates: false, schema: CartEventSchema },
 })

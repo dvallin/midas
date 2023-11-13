@@ -13,6 +13,7 @@
     "@rollup/plugin-json": "^6.0.1",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@types/aws-lambda": "^8.10.124",
+    "@types/elasticsearch": "^5.0.43",
     "rollup": "^4.0.2",
     "rollup-plugin-typescript2": "^0.36.0",
     "testcontainers": "^10.2.1",
@@ -25,10 +26,13 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.429.0",
     "@aws-sdk/client-dynamodb-streams": "^3.441.0",
+    "@aws-sdk/client-elasticsearch-service": "^3.445.0",
     "@aws-sdk/client-s3": "^3.428.0",
     "@aws-sdk/lib-dynamodb": "^3.437.0",
     "@spaceteams/zap": "^0.3.3",
     "aws-lambda": "^1.0.7",
+    "date-fns": "^2.30.0",
+    "elasticsearch": "^16.7.3",
     "nanoid": "^5.0.3"
   }
 }

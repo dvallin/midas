@@ -11,7 +11,7 @@ import keyStorageSpec from '../key-storage-spec'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import { string } from '@spaceteams/zap'
 
-const storage = await createTestDynamoDbStorage({
+const { storage } = await createTestDynamoDbStorage('dynamo-db-key-storage', {
   keyStorageSpec: { type: 'key', tracksUpdates: false, schema: string() },
   contracts: { type: 'array', tracksUpdates: false, schema: ContractSchema },
   contractKeys: { type: 'key', tracksUpdates: false, schema: string() },

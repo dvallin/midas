@@ -31,26 +31,28 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
     return result
   }
 
-  async write(entityId: string, component: T): Promise<void> {
-    await this.storage.write(
+  async write(entityId: string, component: T): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.write(
       this.componentName,
       entityId,
       this.encode(component),
     )
+    return { cursor: lastModified.toString() }
   }
 
   async conditionalWrite(
     entityId: string,
     current: T,
     previous: T | undefined,
-  ): Promise<void> {
+  ): Promise<{ cursor: string }> {
     try {
-      await this.storage.conditionalWrite(
+      const lastModified = await this.storage.conditionalWrite(
         this.componentName,
         entityId,
         this.encode(current),
         previous ? this.encode(previous) : undefined,
       )
+      return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
         throw new Error('conditional write failed', e)
@@ -60,27 +62,41 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
     }
   }
 
-  async *all() {
-    const result = await this.storage.all(this.componentName)
-    for (const item of result.Items ?? []) {
-      yield {
-        entityId: item.entityId,
-        component: this.decode(item.component),
+  async *updates(
+    cursor?: string,
+  ): AsyncGenerator<{ entityId: string; cursor: string }> {
+    if (cursor) {
+      const lastModified = parseFloat(cursor)
+      const result = await this.storage.updates(
+        this.componentName,
+        lastModified,
+      )
+      for (const item of result.Items ?? []) {
+        yield {
+          entityId: item.entityId,
+          cursor: item.lastModified,
+        }
+      }
+      for (const startDate of this.storage.datesAfter(lastModified)) {
+        const result = await this.storage.updates(
+          this.componentName,
+          startDate.valueOf(),
+        )
+        for (const item of result.Items ?? []) {
+          yield {
+            entityId: item.entityId,
+            cursor: item.lastModified,
+          }
+        }
+      }
+    } else {
+      const result = await this.storage.all(this.componentName)
+      for (const item of result.Items ?? []) {
+        yield {
+          entityId: item.entityId,
+          cursor: item.lastModified,
+        }
       }
     }
-  }
-
-  async *updates(cursor: string) {
-    const result = await this.storage.updates(this.componentName, cursor)
-    for (const item of result.Items ?? []) {
-      yield {
-        entityId: item.entityId,
-        cursor: item.sequenceNumber,
-      }
-    }
-  }
-
-  commitUpdateIndex(): Promise<void> {
-    return this.storage.commitUpdateIndex(this.componentName)
   }
 }

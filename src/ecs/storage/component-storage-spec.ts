@@ -7,32 +7,33 @@ export default function spec(provider: () => ComponentStorage<string>) {
     await products.write('1', 'product-1')
     expect(await products.read('1')).toEqual('product-1')
   })
-  it('returns all', async () => {
+  it('collects all updates', async () => {
     const products = provider()
+
     await products.write('1', 'product-1')
     await products.write('2', 'product-1')
+    await products.write('1', 'product-1')
 
     const updates = []
-    for await (const { entityId } of products.all()) {
+    for await (const { entityId } of products.updates()) {
       updates.push(entityId)
     }
-    expect(updates).toEqual(['1', '2'])
+
+    expect(updates).toEqual(expect.arrayContaining(['2', '1']))
   })
-  it('collects updates', async () => {
+  it('collects updates since timestamp', async () => {
     const products = provider()
 
     await products.write('1', 'product-1')
-    await products.write('2', 'product-1')
+    const { cursor } = await products.write('2', 'product-1')
     await products.write('1', 'product-1')
 
-    await products.commitUpdateIndex()
-
     const updates = []
-    for await (const { entityId } of products.updates('0')) {
+    for await (const { entityId } of products.updates(cursor)) {
       updates.push(entityId)
     }
 
-    expect(updates).toEqual(['2', '1'])
+    expect(updates).toEqual(['1'])
   })
 
   describe('conditional writes', () => {

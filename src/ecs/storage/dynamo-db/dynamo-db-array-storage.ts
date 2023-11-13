@@ -26,13 +26,14 @@ export class DynamoDbArrayStorage<T>
     return value.boxed.map((v) => parseThrowing(parser, v))
   }
 
-  async push(entityId: string, component: T): Promise<void> {
+  async push(entityId: string, component: T): Promise<{ cursor: string }> {
     try {
-      await this.storage.push(
+      const lastModified = await this.storage.push(
         this.componentName,
         entityId,
         JSON.stringify(component),
       )
+      return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
         return this.write(entityId, [component])

@@ -8,18 +8,20 @@ export class Importer {
     storage: ComponentStorage<T>,
     onEntity: (entityId: string, component: T) => Promise<void>,
   ) {
-    const startCursor = (await this.cursors.read(importName)) ?? '0'
+    const startCursor = await this.cursors.read(importName)
 
     let nextCursor = startCursor
     for await (const update of storage.updates(startCursor)) {
       const { entityId, cursor } = update
-      const value = await storage.read(entityId)
-      if (value === undefined) {
-        throw new Error('could not find value for entity')
-      }
+      const value = await storage.readOrThrow(entityId)
       await onEntity(entityId, value)
-      nextCursor = cursor
+      if (nextCursor === undefined || nextCursor < cursor) {
+        nextCursor = cursor
+      }
     }
-    await this.cursors.write(importName, nextCursor)
+
+    if (nextCursor) {
+      await this.cursors.write(importName, nextCursor)
+    }
   }
 }

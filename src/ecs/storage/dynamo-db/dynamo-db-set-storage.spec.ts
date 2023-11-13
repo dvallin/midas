@@ -6,7 +6,7 @@ import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import setStorageSpec from '../set-storage-spec'
 import { string } from '@spaceteams/zap'
 
-const storage = await createTestDynamoDbStorage({
+const { storage } = await createTestDynamoDbStorage('dynamo-db-set-storage', {
   setStorageSpec: { type: 'set', tracksUpdates: false, schema: string() },
   productToCategories: { type: 'set', tracksUpdates: false, schema: string() },
   categoryToProducts: { type: 'set', tracksUpdates: false, schema: string() },

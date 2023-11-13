@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ComponentStorage, KeyStorage } from '../storage'
-import { InferType, coercedDate, date, number, object } from '@spaceteams/zap'
+import { InferType, coercedDate, number, object } from '@spaceteams/zap'
 import { nanoid } from 'nanoid'
 import { getById } from '../service/get-by-id'
 

@@ -1,12 +1,12 @@
-import {
-  contextMixinMiddleware,
-  dynamoDbClientMiddleware,
-} from '../../../middleware'
+import { EcsBaseContext, ecsBaseMiddleware } from '../..'
+import { dynamoDbClientMiddleware } from '../../../middleware'
 import { pipeline } from '../../../pipeline'
-import { DynamoDbStorage, DynamoDbStorageContext } from './dynamo-db-storage'
+import { MockTime, timeMiddleware } from '../../service/time'
+import { DynamoDbStorage, dynamoDbStorageMiddleware } from './dynamo-db-storage'
 
 export function createTestDynamoDbStorage(
-  components: DynamoDbStorageContext['ecs']['components'],
+  clusterId: string,
+  components: EcsBaseContext['components'],
 ) {
   return pipeline()
     .use(
@@ -18,18 +18,12 @@ export function createTestDynamoDbStorage(
         { region: 'us-east-1', endpoint: process.env.LOCALSTACK_ENDPOINT },
       ),
     )
-    .use(
-      contextMixinMiddleware(() => ({
-        ecs: {
-          storage: {
-            dynamodb: {
-              config: {},
-            },
-          },
-          components,
-        },
-      })),
-    )
-    .use((_e, c) => new DynamoDbStorage(c))
+    .use(ecsBaseMiddleware(clusterId, components))
+    .use(timeMiddleware(new MockTime()))
+    .use(dynamoDbStorageMiddleware())
+    .use((_e, c) => ({
+      context: c,
+      storage: new DynamoDbStorage(c),
+    }))
     .run({}, {})
 }

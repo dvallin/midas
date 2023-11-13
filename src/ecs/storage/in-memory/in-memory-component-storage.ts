@@ -1,10 +1,13 @@
 import { ComponentStorage } from '..'
+import { Time } from '../../service/time'
 
 export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
   protected readonly storage: Record<
     string,
     { component: T; lastModified: number }
   > = {}
+
+  protected readonly time = new Time()
 
   public get data() {
     return this.storage
@@ -25,16 +28,17 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     return result
   }
 
-  write(entityId: string, component: T): Promise<void> {
-    this.storage[entityId] = { component, lastModified: this.now() }
-    return Promise.resolve(undefined)
+  write(entityId: string, component: T): Promise<{ cursor: string }> {
+    const lastModified = this.time.now
+    this.storage[entityId] = { component, lastModified }
+    return Promise.resolve({ cursor: lastModified.toString() })
   }
 
   async conditionalWrite(
     entityId: string,
     current: T,
     previous: T | undefined,
-  ): Promise<void> {
+  ): Promise<{ cursor: string }> {
     const value = this.storage[entityId]
     if (JSON.stringify(value?.component) !== JSON.stringify(previous)) {
       throw new Error('conditional write failed')
@@ -42,15 +46,8 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     return this.write(entityId, current)
   }
 
-  async *all() {
-    for (const entityId of Object.keys(this.storage)) {
-      const { lastModified, component } = this.storage[entityId]
-      yield { entityId, lastModified, component }
-    }
-  }
-
-  async *updates(cursor: string) {
-    const startDate = parseInt(cursor)
+  async *updates(cursor?: string) {
+    const startDate = parseFloat(cursor ?? '0')
     const result: { lastModified: number; entityId: string }[] = []
     for (const entityId of Object.keys(this.storage)) {
       const { lastModified } = this.storage[entityId]
@@ -62,13 +59,5 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     for (const { entityId, lastModified } of result) {
       yield { entityId, cursor: lastModified.toString() }
     }
-  }
-
-  commitUpdateIndex(): Promise<void> {
-    return Promise.resolve()
-  }
-
-  private now(): number {
-    return performance.timeOrigin + performance.now()
   }
 }
