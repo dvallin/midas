@@ -1,7 +1,12 @@
 import { Awaitable } from './awaitable'
 import { Middleware } from './middleware'
 
-class Pipeline<TEvent, TContext, TBaseContext = TContext, TResult = never> {
+export class Pipeline<
+  TEvent,
+  TContext,
+  TBaseContext = TContext,
+  TResult = never,
+> {
   constructor(private readonly stack: Middleware[]) {}
 
   use<TNextResult, TNextContext = TContext>(

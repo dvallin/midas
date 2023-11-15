@@ -9,20 +9,19 @@ import {
 export type DynamoDbContext = {
   aws: { dynamoDb: DynamoDBDocument; dynamoStreams: DynamoDBStreams }
 }
-export const dynamoDbClientMiddleware = <
-  C extends { aws?: Record<string, unknown> },
->(
+export const dynamoDbClientMiddleware = <C>(
   config: DynamoDBClientConfig,
   streamsConfig: DynamoDBStreamsClientConfig,
 ): ContextExtensionMiddleware<C, DynamoDbContext> => {
   return async (_e, ctx, next) => {
     const client = new DynamoDBClient(config)
+    const c = ctx as { aws?: Record<string, unknown> }
     try {
-      if (!ctx.aws) {
-        ctx.aws = {}
+      if (!c.aws) {
+        c.aws = {}
       }
-      ctx.aws.dynamoDb = DynamoDBDocument.from(client)
-      ctx.aws.dynamoStreams = new DynamoDBStreams(streamsConfig)
+      c.aws.dynamoDb = DynamoDBDocument.from(client)
+      c.aws.dynamoStreams = new DynamoDBStreams(streamsConfig)
       return await next(ctx as C & DynamoDbContext)
     } finally {
       client.destroy()

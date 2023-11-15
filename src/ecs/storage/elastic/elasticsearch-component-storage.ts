@@ -1,32 +1,32 @@
-import { Client } from 'elasticsearch'
+import { Client } from '@elastic/elasticsearch'
 import { ComponentStorage } from '..'
-import {} from '../../../middleware/aws/elasticsearch-client-middleware'
+import { Time, TimeContext } from '../../service/time'
+import { ElasticsearchContext } from '../../../middleware/elasticsearch/elasticsearch-middleware'
+import { MappingProperty } from '@elastic/elasticsearch/lib/api/types'
 
 export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
+  protected readonly client: Client
+  protected readonly time: Time
   constructor(
     protected readonly componentName: string,
-    protected readonly client: Client,
-  ) {}
-
-  getIndex() {
-    return `components_${this.componentName}`
+    protected readonly context: ElasticsearchContext & TimeContext,
+    protected readonly alwaysRefresh: boolean,
+    protected readonly componentType: MappingProperty,
+  ) {
+    this.client = context.elastic.client
+    this.time = context.service.time
   }
 
-  read(entityId: string): Promise<T | undefined> {
-    return new Promise((resolve, reject) => {
-      this.client.get<T>(
-        { id: entityId, index: this.getIndex(), type: 'object' },
-        (error, response) => {
-          if (error) {
-            reject(error)
-          } else if (!response.found) {
-            resolve(undefined)
-          } else {
-            resolve(response._source)
-          }
-        },
-      )
+  getIndex() {
+    return `components_${this.componentName}`.toLocaleLowerCase()
+  }
+
+  async read(entityId: string): Promise<T | undefined> {
+    const result = await this.client.get<{ component: T }>({
+      id: entityId,
+      index: this.getIndex(),
     })
+    return result._source?.component
   }
 
   async readOrThrow(entityId: string): Promise<T> {
@@ -39,41 +39,96 @@ export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
     return value
   }
 
-  write(entityId: string, component: T): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.client.create(
-        {
-          id: entityId,
-          index: this.getIndex(),
-          type: 'object',
-          body: component,
-        },
-        (error, _response) => {
-          if (error) {
-            reject(error)
-          } else {
-            resolve(undefined)
-          }
-        },
-      )
+  async write(entityId: string, component: T): Promise<{ cursor: string }> {
+    const lastModified = this.time.now
+    await this.client.update({
+      id: entityId,
+      index: this.getIndex(),
+      refresh: this.alwaysRefresh,
+      doc: { component, lastModified },
+      upsert: { component, lastModified },
     })
+    return { cursor: lastModified.toString() }
   }
 
-  conditionalWrite(
+  async conditionalWrite(
     entityId: string,
     current: T,
     previous: T | undefined,
-  ): Promise<void> {
-    throw new Error('not implemented')
+  ): Promise<{ cursor: string }> {
+    const lastModified = this.time.now
+    const script = `
+    if (ctx._source.component == params.previous) {
+      ctx._source.component = params.current;
+      ctx._source.lastModified = params.lastModified;
+    } else {
+      throw new IllegalArgumentException("conditional write failed");
+    }
+  `
+    try {
+      await this.client.update({
+        id: entityId,
+        index: this.getIndex(),
+        refresh: this.alwaysRefresh,
+        body: {
+          script: {
+            source: script,
+            lang: 'painless',
+            params: {
+              current,
+              previous,
+              lastModified,
+            },
+          },
+        },
+        upsert: { component: current, lastModified },
+      })
+    } catch (e) {
+      throw new Error('conditional write failed')
+    }
+    return { cursor: lastModified.toString() }
   }
 
-  commitUpdateIndex(): Promise<void> {
-    throw new Error('not implemented')
-  }
-
-  updates(
-    cursor: string,
+  async *updates(
+    cursor?: string,
   ): AsyncGenerator<{ entityId: string; cursor: string }, any, unknown> {
-    throw new Error('not implemented')
+    const result = await this.client.search<{
+      component: T
+      lastModified: number
+    }>({
+      index: this.getIndex(),
+      query: {
+        range: {
+          lastModified: {
+            gt: parseFloat(cursor ?? '0'),
+          },
+        },
+      },
+      sort: ['lastModified'],
+    })
+
+    for (const hit of result.hits.hits) {
+      const entityId = hit._id
+      const lastModified = hit._source?.lastModified
+      if (!lastModified) {
+        throw new Error('last modified missing')
+      }
+      yield { entityId, cursor: lastModified.toString() }
+    }
+  }
+
+  async migrate() {
+    await this.client.indices.create({
+      index: this.getIndex(),
+      mappings: {
+        properties: {
+          lastModified: { type: 'double' },
+          component: this.componentType,
+        },
+      },
+    })
+  }
+  async teardown() {
+    await this.client.indices.delete({ index: this.getIndex() })
   }
 }

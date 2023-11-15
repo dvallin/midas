@@ -14,16 +14,18 @@ import { Time, TimeContext } from '../../service/time'
 import { EcsBaseContext } from '../..'
 import { addDays, differenceInDays, startOfDay } from 'date-fns'
 
-export type DynamoDbStorageContext = {
-  storage: {
-    dynamodb: {
-      config: {
-        returnConsumedCapacity?: ReturnConsumedCapacity
+export type DynamoDbStorageContext = DynamoDbContext &
+  EcsBaseContext &
+  TimeContext & {
+    storage: {
+      dynamodb: {
+        config: {
+          returnConsumedCapacity?: ReturnConsumedCapacity
+        }
       }
     }
   }
-}
-export const dynamoDbStorageMiddleware = <C>(
+export const dynamoDbStorageContextMiddleware = <C>(
   returnConsumedCapacity?: ReturnConsumedCapacity,
 ): ContextExtensionMiddleware<C, DynamoDbStorageContext> => {
   return async (_e, ctx, next) => {

@@ -15,7 +15,7 @@ export type EcsBaseContext = {
   }
 }
 
-export const ecsBaseMiddleware = <C extends Record<string, unknown>>(
+export const ecsBaseMiddleware = <C>(
   clusterId: string,
   components: EcsBaseContext['components'],
 ): ContextExtensionMiddleware<C, EcsBaseContext> => {
