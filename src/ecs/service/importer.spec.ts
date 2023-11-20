@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest'
 import { Importer } from './importer'
-import { InMemoryComponentStorage } from '../storage'
+import { InMemoryComponentStorage, InMemoryUpdateStorage } from '../storage'
 
-const storage = new InMemoryComponentStorage<string>()
+const storage = new InMemoryUpdateStorage<string>()
 await storage.write('1', 'component-1')
 await storage.write('2', 'component-2')
 await storage.write('3', 'component-3')
@@ -12,7 +12,7 @@ it('imports', async () => {
   const importer = new Importer(cursors)
 
   const imported = new InMemoryComponentStorage<string>()
-  await importer.runImport('test', storage, (entityId, component) =>
+  await importer.runImport('test', storage, storage, (entityId, component) =>
     imported.write(entityId, component),
   )
 
@@ -27,10 +27,10 @@ it('imports only once', async () => {
   const importer = new Importer(new InMemoryComponentStorage<string>())
 
   const imported = new InMemoryComponentStorage<string>()
-  await importer.runImport('test', storage, (entityId, component) =>
+  await importer.runImport('test', storage, storage, (entityId, component) =>
     imported.write(entityId, component),
   )
-  await importer.runImport('test', storage, (entityId, component) =>
+  await importer.runImport('test', storage, storage, (entityId, component) =>
     imported.write(entityId, component),
   )
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ComponentStorage } from '../storage'
+import { ComponentStorage, UpdateStorage } from '../storage'
 import { Importer } from '../service/importer'
 import { InferType, object, omit, record, string, and } from '@spaceteams/zap'
 
@@ -26,7 +26,9 @@ export type Product = InferType<typeof ProductSchema>
 export default function (
   provider: () => {
     skus: ComponentStorage<Sku>
+    skuUpdates: UpdateStorage
     variants: ComponentStorage<Variant>
+    variantUpdates: UpdateStorage
     products: ComponentStorage<Product>
     cursors: ComponentStorage<string>
   },
@@ -34,7 +36,8 @@ export default function (
   describe('product-variants-usecase', () => {
     it('creates a product based on variants and skus', async () => {
       // given
-      const { skus, variants, products, cursors } = provider()
+      const { skus, skuUpdates, variantUpdates, variants, products, cursors } =
+        provider()
 
       await variants.write('product-id', {
         variantKey: 'color',
@@ -55,6 +58,7 @@ export default function (
       await importer.runImport(
         'products-sku-update-importer',
         skus,
+        skuUpdates,
         async (skuId, sku) => {
           const id = sku.parent
           const variant = await variants.readOrThrow(id)
@@ -67,6 +71,7 @@ export default function (
       await importer.runImport(
         'products-variants-update-importer',
         variants,
+        variantUpdates,
         async (id, variant) => {
           const product = await products.readOrThrow(id)
           const updated = onVariantChange(product, variant)

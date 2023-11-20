@@ -1,16 +1,16 @@
 import { expect, it } from 'vitest'
 import { ZipImporter } from './zip-importer'
-import { InMemoryComponentStorage } from '../storage'
+import { InMemoryComponentStorage, InMemoryUpdateStorage } from '../storage'
 import { InferType, object, optional, string } from '@spaceteams/zap'
 
-const storage = new InMemoryComponentStorage<string>()
+const storage = new InMemoryUpdateStorage<string>()
 await storage.write('1', 'component-1')
 await storage.write('2', 'component-2')
 await storage.write('3', 'component-3')
-const storage2 = new InMemoryComponentStorage<string>()
+const storage2 = new InMemoryUpdateStorage<string>()
 await storage2.write('1', 'component-1')
 await storage2.write('3', 'component-3')
-const storage3 = new InMemoryComponentStorage<string>()
+const storage3 = new InMemoryUpdateStorage<string>()
 await storage3.write('1', 'component-1')
 
 const schema = object({
@@ -27,6 +27,7 @@ it('imports zipped over multiple storages', async () => {
   await importer.runImportWithSchema(
     'test',
     { storage, storage2, storage3 },
+    { storage, storage2 },
     schema,
     (entityId, component) => imported.write(entityId, component),
   )

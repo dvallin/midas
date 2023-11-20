@@ -1,15 +1,21 @@
 import { Schema } from '@spaceteams/zap'
-import { ComponentStorage } from '../storage'
+import { ComponentStorage, UpdateStorage } from '../storage'
 import { GetResult, getById } from './get-by-id'
 
 export class ZipImporter {
   constructor(private readonly cursors: ComponentStorage<string>) {}
 
   async runImport<
-    T extends { [componentName: string]: ComponentStorage<unknown> },
+    T extends {
+      [componentName: string]: ComponentStorage<unknown>
+    },
+    U extends {
+      [componentName: string]: UpdateStorage
+    },
   >(
     importName: string,
     storages: T,
+    updates: U,
     onEntity: (entityId: string, components: GetResult<T>) => Promise<void>,
   ) {
     const startDate = (await this.cursors.read(importName)) ?? '0'
@@ -17,8 +23,11 @@ export class ZipImporter {
     let nextCursor = startDate
     const seen = new Set()
     for (const componentName of Object.keys(storages)) {
-      const storage = storages[componentName]
-      for await (const update of storage.updates(startDate)) {
+      const updateStorage = updates[componentName]
+      if (updateStorage === undefined) {
+        continue
+      }
+      for await (const update of updateStorage.updates(startDate)) {
         const { entityId, cursor } = update
         if (seen.has(entityId)) {
           continue
@@ -38,17 +47,22 @@ export class ZipImporter {
 
   runImportWithSchema<
     T extends { [componentName: string]: ComponentStorage<unknown> },
+    U extends {
+      [componentName: string]: UpdateStorage
+    },
     I,
     O = I,
   >(
     importName: string,
     storages: T,
+    updates: U,
     schema: Schema<I, O>,
-    onEntity: (entityId: string, components: O) => Promise<void>,
+    onEntity: (entityId: string, components: O) => Promise<unknown>,
   ) {
     return this.runImport(
       importName,
       storages,
+      updates,
       async (entityId, components) => {
         const { parsedValue } = schema.parse(components)
         if (parsedValue) {

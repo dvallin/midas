@@ -1,4 +1,5 @@
 import { DynamoDbComponentStorage } from './dynamo-db-component-storage'
+import { DynamoDbUpdateStorage } from './dynamo-db-update-storage'
 import componentStorageSpec from '../component-storage-spec'
 import productVariantsUsecase, {
   ProductSchema,
@@ -33,13 +34,16 @@ const { storage, context } = await createTestDynamoDbStorage(
 beforeAll(() => storage.migrate())
 afterAll(() => storage.teardown())
 
-componentStorageSpec(
-  () => new DynamoDbComponentStorage('componentStorageSpec', storage),
-)
+componentStorageSpec(() => ({
+  storage: new DynamoDbComponentStorage('componentStorageSpec', storage),
+  updates: new DynamoDbUpdateStorage('componentStorageSpec', storage),
+}))
 
 productVariantsUsecase(() => ({
   skus: new DynamoDbComponentStorage('skus', storage),
+  skuUpdates: new DynamoDbUpdateStorage('skus', storage),
   variants: new DynamoDbComponentStorage('variants', storage),
+  variantUpdates: new DynamoDbUpdateStorage('variants', storage),
   products: new DynamoDbComponentStorage('products', storage),
   cursors: new DynamoDbComponentStorage('cursors', storage),
 }))

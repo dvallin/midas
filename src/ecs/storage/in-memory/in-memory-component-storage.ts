@@ -45,19 +45,4 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     }
     return this.write(entityId, current)
   }
-
-  async *updates(cursor?: string) {
-    const startDate = parseFloat(cursor ?? '0')
-    const result: { lastModified: number; entityId: string }[] = []
-    for (const entityId of Object.keys(this.storage)) {
-      const { lastModified } = this.storage[entityId]
-      if (lastModified > startDate) {
-        result.push({ entityId, lastModified })
-      }
-    }
-    result.sort((a, b) => a.lastModified - b.lastModified)
-    for (const { entityId, lastModified } of result) {
-      yield { entityId, cursor: lastModified.toString() }
-    }
-  }
 }

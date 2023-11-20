@@ -7,12 +7,14 @@ export interface ComponentStorage<T> {
     current: T,
     previous: T | undefined,
   ): Promise<{ cursor: string }>
-  updates(cursor?: string): AsyncGenerator<{ entityId: string; cursor: string }>
 }
 export type InferComponentType<T> = T extends ComponentStorage<infer I>
   ? I
   : never
 
+export interface UpdateStorage {
+  updates(cursor?: string): AsyncGenerator<{ entityId: string; cursor: string }>
+}
 export interface ArrayStorage<T> extends ComponentStorage<T[]> {
   push(entityId: string, component: T): Promise<{ cursor: string }>
 }

@@ -25,7 +25,9 @@ export type DynamoDbStorageContext = DynamoDbContext &
       }
     }
   }
-export const dynamoDbStorageContextMiddleware = <C>(
+export const dynamoDbStorageContextMiddleware = <
+  C extends DynamoDbContext & EcsBaseContext & TimeContext,
+>(
   returnConsumedCapacity?: ReturnConsumedCapacity,
 ): ContextExtensionMiddleware<C, DynamoDbStorageContext> => {
   return async (_e, ctx, next) => {

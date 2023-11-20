@@ -1,4 +1,5 @@
 import { ElasticsearchComponentStorage } from './elasticsearch-component-storage'
+import { ElasticsearchUpdateStorage } from './elasticsearch-update-storage'
 import componentStorageSpec from '../component-storage-spec'
 import { pipeline } from '../../../pipeline'
 import { timeMiddleware } from '../../service/time'
@@ -7,22 +8,34 @@ import {
   elasticsearchMiddleware,
 } from '../../../middleware/elasticsearch/elasticsearch-middleware'
 import { afterAll, beforeAll } from 'vitest'
+import {
+  ElasticsearchStorage,
+  elasticsearchStorageContextMiddleware,
+} from './elasticsearch-storage'
+import { ecsBaseMiddleware } from '../..'
+import { string } from '@spaceteams/zap'
 
-const c = await pipeline()
+const storage = await pipeline()
+  .use(
+    ecsBaseMiddleware('cluster', {
+      componentStorageSpec: {
+        type: 'default',
+        tracksUpdates: true,
+        schema: string(),
+      },
+    }),
+  )
   .use(timeMiddleware())
   .use(elasticsearchEndpointMiddleware(process.env.ELASTICSEARCH_ENDPOINT!))
   .use(elasticsearchMiddleware({}))
-  .use((_e, c) => c)
+  .use(elasticsearchStorageContextMiddleware(true))
+  .use((_e, c) => new ElasticsearchStorage(c))
   .run({}, {})
-
-const storage = new ElasticsearchComponentStorage<string>(
-  'componentStorageSpec',
-  c,
-  true,
-  { type: 'keyword' },
-)
 
 beforeAll(() => storage.migrate())
 afterAll(() => storage.teardown())
 
-componentStorageSpec(() => storage)
+componentStorageSpec(() => ({
+  storage: new ElasticsearchComponentStorage('componentStorageSpec', storage),
+  updates: new ElasticsearchUpdateStorage('componentStorageSpec', storage),
+}))
