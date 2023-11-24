@@ -21,13 +21,15 @@ const schema = object({
 
 it('imports zipped over multiple storages', async () => {
   const cursors = new InMemoryComponentStorage<string>()
-  const importer = new ZipImporter(cursors)
+  const importer = new ZipImporter({
+    name: 'test',
+    cursors,
+    storages: { storage, storage2, storage3 },
+    updateStorages: { storage, storage2 },
+  })
 
   const imported = new InMemoryComponentStorage<InferType<typeof schema>>()
   await importer.runImportWithSchema(
-    'test',
-    { storage, storage2, storage3 },
-    { storage, storage2 },
     schema,
     (entityId, component) => imported.write(entityId, component),
   )

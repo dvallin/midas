@@ -9,6 +9,19 @@ export default function spec(
     await storage.write('1', 'product-1')
     expect(await storage.read('1')).toEqual('product-1')
   })
+  it('batch reads and writes', async () => {
+    const { storage } = provider()
+    const writes = []
+    for (let i = 0; i < 100; i++) {
+      writes.push({ entityId: i.toString(), component: `product-${i}` })
+    }
+    await storage.batchWrite(writes)
+
+    const read = await storage.batchRead(writes.map((w) => w.entityId))
+    for (let i = 0; i < 100; i++) {
+      expect(read[i].value).toEqual(`product-${i}`)
+    }
+  })
   it('collects all updates', async () => {
     const { storage, updates } = provider()
 
@@ -20,7 +33,6 @@ export default function spec(
     for await (const { entityId } of updates.updates()) {
       result.push(entityId)
     }
-
     expect(result).toEqual(expect.arrayContaining(['2', '1']))
   })
   it('collects updates since timestamp', async () => {
@@ -28,6 +40,7 @@ export default function spec(
 
     await storage.write('1', 'product-1')
     const { cursor } = await storage.write('2', 'product-1')
+    await storage.write('3', 'product-1')
     await storage.write('1', 'product-1')
 
     const result = []
@@ -35,7 +48,7 @@ export default function spec(
       result.push(entityId)
     }
 
-    expect(result).toEqual(['1'])
+    expect(result).toEqual(['3', '1'])
   })
 
   describe('conditional writes', () => {

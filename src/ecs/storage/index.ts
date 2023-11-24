@@ -1,15 +1,31 @@
+export type BatchReadResult<T> = {
+  [entityId: string]: {
+    value?: T
+    error?: Error
+  }
+}
+export type BatchWrite<T> = { entityId: string; component: T }
+export type BatchWriteResult = {
+  [entityId: string]: {
+    cursor: string
+    error?: Error
+  }
+}
 export interface ComponentStorage<T> {
   read(entityId: string): Promise<T | undefined>
   readOrThrow(entityId: string): Promise<T>
+
   write(entityId: string, component: T): Promise<{ cursor: string }>
   conditionalWrite(
     entityId: string,
     current: T,
     previous: T | undefined,
   ): Promise<{ cursor: string }>
+
+  batchRead(entityIds: string[]): Promise<BatchReadResult<T>>
+  batchWrite(writes: BatchWrite<T>[]): Promise<BatchWriteResult>
 }
-export type InferComponentType<T> = T extends ComponentStorage<infer I>
-  ? I
+export type InferComponentType<T> = T extends ComponentStorage<infer I> ? I
   : never
 
 export interface UpdateStorage {

@@ -9,11 +9,16 @@ await storage.write('3', 'component-3')
 
 it('imports', async () => {
   const cursors = new InMemoryComponentStorage<string>()
-  const importer = new Importer(cursors)
+  const importer = new Importer({
+    name: 'test',
+    cursors,
+    storage,
+    updateStorage: storage,
+  })
 
   const imported = new InMemoryComponentStorage<string>()
-  await importer.runImport('test', storage, storage, (entityId, component) =>
-    imported.write(entityId, component),
+  await importer.runImport((entityId, component) =>
+    imported.write(entityId, component!)
   )
 
   expect(imported.size).toEqual(storage.size)
@@ -24,14 +29,19 @@ it('imports', async () => {
 })
 
 it('imports only once', async () => {
-  const importer = new Importer(new InMemoryComponentStorage<string>())
+  const importer = new Importer({
+    name: 'test',
+    cursors: new InMemoryComponentStorage<string>(),
+    storage,
+    updateStorage: storage,
+  })
 
   const imported = new InMemoryComponentStorage<string>()
-  await importer.runImport('test', storage, storage, (entityId, component) =>
-    imported.write(entityId, component),
+  await importer.runImport((entityId, component) =>
+    imported.write(entityId, component!)
   )
-  await importer.runImport('test', storage, storage, (entityId, component) =>
-    imported.write(entityId, component),
+  await importer.runImport((entityId, component) =>
+    imported.write(entityId, component!)
   )
 
   expect(imported.size).toEqual(storage.size)

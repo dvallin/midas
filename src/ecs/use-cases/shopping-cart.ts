@@ -1,9 +1,9 @@
 import { describe, it } from 'vitest'
 import { ArrayStorage, ComponentStorage } from '../storage'
 import {
-  InferType,
   array,
   discriminatedUnion,
+  InferType,
   literal,
   number,
   object,

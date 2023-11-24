@@ -11,7 +11,7 @@ let localStack: StartedTestContainer
 let elasticsearch: StartedElasticsearchContainer
 export async function setup() {
   ;[localStack, elasticsearch] = await Promise.all([
-    new GenericContainer('localstack/localstack')
+    new GenericContainer('localstack/localstack:3.0.0')
       .withExposedPorts(4566)
       .start(),
     new ElasticsearchContainer().start(),

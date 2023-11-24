@@ -4,13 +4,13 @@ import { KeyStorage } from '.'
 export default function spec(provider: () => KeyStorage) {
   it('reads and writes', async () => {
     const storage = provider()
-    await storage.write('read-and-write', '1')
-    expect(await storage.read('read-and-write')).toEqual('1')
+    await storage.write('read-and-write', 'read-and-write-value')
+    expect(await storage.read('read-and-write')).toEqual('read-and-write-value')
   })
   it('gets by key', async () => {
     const storage = provider()
-    await storage.write('gets-by-key', '1')
-    expect(await storage.getByKey('1')).toEqual('gets-by-key')
+    await storage.write('gets-by-key', 'gets-by-key-value')
+    expect(await storage.getByKey('gets-by-key-value')).toEqual('gets-by-key')
   })
   describe('conditional writes', () => {
     it('writes if value is the same', async () => {

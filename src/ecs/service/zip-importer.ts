@@ -1,74 +1,94 @@
 import { Schema } from '@spaceteams/zap'
 import { ComponentStorage, UpdateStorage } from '../storage'
-import { GetResult, getById } from './get-by-id'
+import { GetResult, Query } from './queries'
+import { Batcher } from './batcher'
 
-export class ZipImporter {
-  constructor(private readonly cursors: ComponentStorage<string>) {}
+export type ComponentStorages = {
+  [componentName: string]: ComponentStorage<unknown>
+}
+export type UpdateStorages = {
+  [componentName: string]: UpdateStorage
+}
 
-  async runImport<
-    T extends {
-      [componentName: string]: ComponentStorage<unknown>
-    },
-    U extends {
-      [componentName: string]: UpdateStorage
-    },
-  >(
-    importName: string,
-    storages: T,
-    updates: U,
+export type ZipImporterConfig<
+  T extends ComponentStorages,
+  U extends UpdateStorages,
+> = {
+  name: string
+  cursors: ComponentStorage<string>
+  storages: T
+  updateStorages: U
+  batchSize?: number
+}
+
+export class ZipImporter<
+  T extends ComponentStorages,
+  U extends UpdateStorages,
+> {
+  private readonly importName: string
+  private readonly cursors: ComponentStorage<string>
+  private readonly storages: T
+  private readonly updateStorages: U
+  private readonly batcher: Batcher
+  private readonly query: Query<T>
+  constructor(config: ZipImporterConfig<T, U>) {
+    this.importName = config.name
+    this.cursors = config.cursors
+    this.storages = config.storages
+    this.updateStorages = config.updateStorages
+    this.batcher = new Batcher(config.batchSize ?? 10)
+    this.query = new Query(this.storages)
+  }
+
+  async runImport(
     onEntity: (entityId: string, components: GetResult<T>) => Promise<void>,
   ) {
-    const startDate = (await this.cursors.read(importName)) ?? '0'
+    const startCursor = (await this.cursors.read(this.importName)) ?? '0'
 
-    let nextCursor = startDate
+    let nextCursor = startCursor
     const seen = new Set()
-    for (const componentName of Object.keys(storages)) {
-      const updateStorage = updates[componentName]
+    for (const componentName of Object.keys(this.storages)) {
+      const updateStorage = this.updateStorages[componentName]
       if (updateStorage === undefined) {
         continue
       }
-      for await (const update of updateStorage.updates(startDate)) {
-        const { entityId, cursor } = update
-        if (seen.has(entityId)) {
+      for await (
+        const batch of this.batcher.batch(
+          updateStorage.updates(startCursor),
+        )
+      ) {
+        const freshBatch = batch.filter((b) => !seen.has(b.entityId))
+        if (freshBatch.length === 0) {
           continue
         }
-        seen.add(entityId)
 
-        const value = await getById(entityId, storages)
-        if (value) {
-          await onEntity(entityId, value)
-          nextCursor =
-            cursor.localeCompare(nextCursor) > 0 ? cursor : nextCursor
+        const ids = freshBatch.map((b) => b.entityId)
+        const components = await this.query.getManyById(ids)
+        for (const id of ids) {
+          seen.add(id)
+          await onEntity(id, components[id])
+        }
+
+        const cursor = freshBatch
+          .map((a) => a.cursor)
+          .reduce((a, b) => (a < b ? b : a))
+        if (nextCursor === undefined || nextCursor < cursor) {
+          nextCursor = cursor
         }
       }
     }
-    await this.cursors.write(importName, nextCursor)
+    await this.cursors.write(this.importName, nextCursor)
   }
 
-  runImportWithSchema<
-    T extends { [componentName: string]: ComponentStorage<unknown> },
-    U extends {
-      [componentName: string]: UpdateStorage
-    },
-    I,
-    O = I,
-  >(
-    importName: string,
-    storages: T,
-    updates: U,
+  runImportWithSchema<I, O = I>(
     schema: Schema<I, O>,
     onEntity: (entityId: string, components: O) => Promise<unknown>,
   ) {
-    return this.runImport(
-      importName,
-      storages,
-      updates,
-      async (entityId, components) => {
-        const { parsedValue } = schema.parse(components)
-        if (parsedValue) {
-          await onEntity(entityId, parsedValue)
-        }
-      },
-    )
+    return this.runImport(async (entityId, components) => {
+      const { parsedValue } = schema.parse(components)
+      if (parsedValue) {
+        await onEntity(entityId, parsedValue)
+      }
+    })
   }
 }

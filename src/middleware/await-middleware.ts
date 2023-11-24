@@ -1,4 +1,4 @@
-import { ContextMappingMiddleware, Middleware } from '.'
+import { ContextMappingMiddleware } from '.'
 
 export const awaitMiddleware = <C, K extends keyof C>(
   ...keys: K[]

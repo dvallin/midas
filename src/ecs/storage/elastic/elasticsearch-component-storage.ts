@@ -1,4 +1,9 @@
-import { ComponentStorage } from '..'
+import {
+  BatchReadResult,
+  BatchWrite,
+  BatchWriteResult,
+  ComponentStorage,
+} from '..'
 import { ElasticsearchStorage } from './elasticsearch-storage'
 
 export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
@@ -30,7 +35,7 @@ export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
     return this.storage.write(this.componentName, entityId, component)
   }
 
-  async conditionalWrite(
+  conditionalWrite(
     entityId: string,
     current: T,
     previous: T | undefined,
@@ -41,5 +46,38 @@ export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
       current,
       previous,
     )
+  }
+
+  async batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {
+    const result: BatchReadResult<T> = {}
+    const batchReadResult = await this.storage.batchRead<T>(
+      this.componentName,
+      entityIds,
+    )
+    for (const doc of batchReadResult.docs) {
+      if ('error' in doc) {
+        result[doc._id] = {
+          error: new Error(doc.error.reason, { cause: doc.error }),
+        }
+      } else {
+        result[doc._id] = {
+          value: doc._source?.component,
+        }
+      }
+    }
+    return result
+  }
+
+  async batchWrite(writes: BatchWrite<T>[]): Promise<BatchWriteResult> {
+    const result: BatchWriteResult = {}
+    const batchWriteResult = await this.storage.batchWrite<T>(
+      this.componentName,
+      writes,
+    )
+    for (const { entityId } of writes) {
+      const lastModified = batchWriteResult.lastModifiedByEntityId[entityId]
+      result[entityId] = { cursor: lastModified.toString() }
+    }
+    return result
   }
 }

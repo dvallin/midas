@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ComponentStorage, UpdateStorage } from '../storage'
 import { Importer } from '../service/importer'
-import { InferType, object, omit, record, string, and } from '@spaceteams/zap'
+import { and, InferType, object, omit, record, string } from '@spaceteams/zap'
+import { ZipImporter } from '../service/zip-importer'
 
 export const AttributesSchema = record(string())
 export const SkuSchema = object({
@@ -54,26 +55,27 @@ export default function (
       })
 
       // when skus are updated we need to mix them into the product
-      const importer = new Importer(cursors)
-      await importer.runImport(
-        'products-sku-update-importer',
-        skus,
-        skuUpdates,
-        async (skuId, sku) => {
-          const id = sku.parent
-          const variant = await variants.readOrThrow(id)
-          const product = await products.read(id)
-          const updated = onSkuChange(product, variant, skuId, sku)
-          await products.conditionalWrite(id, updated, product)
-        },
-      )
+      await new Importer({
+        name: 'products-sku-update-importer',
+        cursors,
+        storage: skus,
+        updateStorage: skuUpdates,
+      }).runImportWithSchema(SkuSchema, async (skuId, sku) => {
+        const id = sku.parent
+        const variant = await variants.readOrThrow(id)
+        const product = await products.read(id)
+        const updated = onSkuChange(product, variant, skuId, sku)
+        await products.conditionalWrite(id, updated, product)
+      })
       // when variants are updated we also need to mix them into the products
-      await importer.runImport(
-        'products-variants-update-importer',
-        variants,
-        variantUpdates,
-        async (id, variant) => {
-          const product = await products.readOrThrow(id)
+      await new ZipImporter({
+        name: 'products-variants-update-importer',
+        cursors,
+        storages: { variant: variants, product: products },
+        updateStorages: { variantUpdates },
+      }).runImportWithSchema(
+        object({ variant: VariantSchema, product: ProductSchema }),
+        async (id, { variant, product }) => {
           const updated = onVariantChange(product, variant)
           await products.conditionalWrite(id, updated, product)
         },

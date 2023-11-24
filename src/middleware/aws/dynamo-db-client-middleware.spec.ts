@@ -4,10 +4,9 @@ import { dynamoDbClientMiddleware } from './dynamo-db-client-middleware'
 
 it('creates client', async () => {
   const run = pipeline()
-    .use(dynamoDbClientMiddleware({}, {}))
+    .use(dynamoDbClientMiddleware({}))
     .use((_e, c) => c)
     .build()
   const result = await run({}, {})
   expect(result.aws.dynamoDb).toBeDefined()
-  expect(result.aws.dynamoStreams).toBeDefined()
 })

@@ -6,7 +6,7 @@ import productVariantsUsecase, {
   SkuSchema,
   VariantSchema,
 } from '../../use-cases/product-variants'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import { string } from '@spaceteams/zap'
 import { MockTime } from '../../service/time'
@@ -54,6 +54,10 @@ describe('updates', () => {
       'componentStorageTest',
       storage,
     )
+    const testUpdates = new DynamoDbUpdateStorage(
+      'componentStorageTest',
+      storage,
+    )
     const time = context.service.time as MockTime
 
     time.setMockNow(new Date('2023-11-10T19:22:14Z'))
@@ -64,7 +68,7 @@ describe('updates', () => {
 
     time.setMockNow(new Date('2023-11-13T19:22:14Z'))
     const updates: string[] = []
-    for await (const { entityId } of test.updates(cursor)) {
+    for await (const { entityId } of testUpdates.updates(cursor)) {
       updates.push(entityId)
     }
 

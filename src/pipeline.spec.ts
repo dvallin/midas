@@ -1,6 +1,5 @@
-import { expect, it, vi } from 'vitest'
+import { expect, it } from 'vitest'
 import { pipeline } from './pipeline'
-import { Middleware } from './middleware'
 
 it('returns value', () => {
   const handler = pipeline()
@@ -28,7 +27,7 @@ it('allows errors to be handled upstream', async () => {
     .use(async (_e, ctx, next) => {
       try {
         return await next(ctx)
-      } catch (e) {
+      } catch (_e) {
         return 'handled'
       }
     })

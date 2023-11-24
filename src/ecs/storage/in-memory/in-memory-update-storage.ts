@@ -1,10 +1,8 @@
 import { UpdateStorage } from '..'
 import { InMemoryComponentStorage } from './in-memory-component-storage'
 
-export class InMemoryUpdateStorage<T>
-  extends InMemoryComponentStorage<T>
-  implements UpdateStorage
-{
+export class InMemoryUpdateStorage<T> extends InMemoryComponentStorage<T>
+  implements UpdateStorage {
   async *updates(cursor?: string) {
     const startDate = parseFloat(cursor ?? '0')
     const result: { lastModified: number; entityId: string }[] = []

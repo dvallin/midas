@@ -1,10 +1,14 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { ComponentStorage } from '..'
+import {
+  BatchReadResult,
+  BatchWrite,
+  BatchWriteResult,
+  ComponentStorage,
+} from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
 
 export abstract class AbstractDynamoDbComponentStorage<T, E>
-  implements ComponentStorage<T>
-{
+  implements ComponentStorage<T> {
   constructor(
     protected componentName: string,
     protected storage: DynamoDbStorage,
@@ -14,7 +18,7 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
   abstract decode(value: E): T
 
   async read(entityId: string): Promise<T | undefined> {
-    const result = (await this.storage.read(this.componentName, entityId)) as E
+    const result = await this.storage.read<E>(this.componentName, entityId)
     if (result === undefined) {
       return undefined
     }
@@ -62,41 +66,38 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
     }
   }
 
-  async *updates(
-    cursor?: string,
-  ): AsyncGenerator<{ entityId: string; cursor: string }> {
-    if (cursor) {
-      const lastModified = parseFloat(cursor)
-      const result = await this.storage.updates(
-        this.componentName,
-        lastModified,
-      )
-      for (const item of result.Items ?? []) {
-        yield {
-          entityId: item.entityId,
-          cursor: item.lastModified,
-        }
-      }
-      for (const startDate of this.storage.datesAfter(lastModified)) {
-        const result = await this.storage.updates(
-          this.componentName,
-          startDate.valueOf(),
-        )
-        for (const item of result.Items ?? []) {
-          yield {
-            entityId: item.entityId,
-            cursor: item.lastModified,
-          }
-        }
-      }
-    } else {
-      const result = await this.storage.all(this.componentName)
-      for (const item of result.Items ?? []) {
-        yield {
-          entityId: item.entityId,
-          cursor: item.lastModified,
-        }
-      }
+  async batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {
+    const result: BatchReadResult<T> = {}
+    const batchReadResult = await this.storage.batchRead<E>(
+      this.componentName,
+      entityIds,
+    )
+    for (const id of entityIds) {
+      const value = batchReadResult.components[id]
+      result[id] = { value: value ? this.decode(value) : undefined }
     }
+    for (const id of batchReadResult.unprocessed) {
+      result[id] = { error: new Error('not processed') }
+    }
+    return result
+  }
+
+  async batchWrite(writes: BatchWrite<T>[]): Promise<BatchWriteResult> {
+    const result: BatchWriteResult = {}
+    const batchReadResult = await this.storage.batchWrite(
+      this.componentName,
+      writes.map(({ entityId, component }) => ({
+        entityId,
+        component: this.encode(component),
+      })),
+    )
+    for (const { entityId } of writes) {
+      const lastModified = batchReadResult.lastModifiedByEntityId[entityId]
+      result[entityId] = { cursor: lastModified.toString() }
+    }
+    for (const entityId of batchReadResult.unprocessed) {
+      result[entityId].error = new Error('not processed')
+    }
+    return result
   }
 }

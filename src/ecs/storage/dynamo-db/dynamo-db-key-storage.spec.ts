@@ -1,5 +1,5 @@
 import { afterAll, beforeAll } from 'vitest'
-import { DynamoDbKeyStorage, DynamoDbComponentStorage } from '.'
+import { DynamoDbComponentStorage, DynamoDbKeyStorage } from '.'
 
 import leasingNinjaUseCase, {
   CalculatedInstallmentSchema,

@@ -13,6 +13,9 @@ export type EcsBaseContext = {
       schema?: Schema<unknown>
     }
   }
+  storage: {
+    batchSize?: number
+  }
 }
 
 export const ecsBaseMiddleware = <C>(

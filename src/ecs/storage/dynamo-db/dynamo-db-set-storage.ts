@@ -1,14 +1,13 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { SetStorage } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
-import { Schema, json } from '@spaceteams/zap'
+import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing } from './schema-parse'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 
 export class DynamoDbSetStorage<T>
   extends AbstractDynamoDbComponentStorage<T[], { boxed: Set<string> }>
-  implements SetStorage<T>
-{
+  implements SetStorage<T> {
   constructor(componentName: string, storage: DynamoDbStorage) {
     super(componentName, storage)
   }

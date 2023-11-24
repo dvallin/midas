@@ -1,4 +1,8 @@
-import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb'
+import {
+  BatchGetCommandOutput,
+  BatchWriteCommandOutput,
+  DynamoDBDocument,
+} from '@aws-sdk/lib-dynamodb'
 import {
   ContextExtensionMiddleware,
   DynamoDbContext,
@@ -9,14 +13,15 @@ import {
   DeleteTableCommand,
   ReturnConsumedCapacity,
 } from '@aws-sdk/client-dynamodb'
-import { DynamoDBStreams } from '@aws-sdk/client-dynamodb-streams'
 import { Time, TimeContext } from '../../service/time'
-import { EcsBaseContext } from '../..'
+import { BatchWrite, EcsBaseContext } from '../..'
 import { addDays, differenceInDays, startOfDay } from 'date-fns'
 
-export type DynamoDbStorageContext = DynamoDbContext &
-  EcsBaseContext &
-  TimeContext & {
+export type DynamoDbStorageContext =
+  & DynamoDbContext
+  & EcsBaseContext
+  & TimeContext
+  & {
     storage: {
       dynamodb: {
         config: {
@@ -29,6 +34,7 @@ export const dynamoDbStorageContextMiddleware = <
   C extends DynamoDbContext & EcsBaseContext & TimeContext,
 >(
   returnConsumedCapacity?: ReturnConsumedCapacity,
+  batchingSize?: number,
 ): ContextExtensionMiddleware<C, DynamoDbStorageContext> => {
   return async (_e, ctx, next) => {
     const c = ctx as { storage?: Record<string, unknown> }
@@ -38,6 +44,7 @@ export const dynamoDbStorageContextMiddleware = <
     c.storage.dynamodb = {
       config: {
         returnConsumedCapacity,
+        batchingSize,
       },
     }
     return await next(ctx as C & DynamoDbStorageContext)
@@ -46,24 +53,25 @@ export const dynamoDbStorageContextMiddleware = <
 
 export class DynamoDbStorage {
   protected readonly client: DynamoDBDocument
-  protected readonly dynamoStreams: DynamoDBStreams
   protected readonly components: EcsBaseContext['components']
   protected readonly returnConsumedCapacity?: ReturnConsumedCapacity
   protected readonly clusterId: string
   protected readonly time: Time
+  protected readonly batchSize: number
   constructor(
-    context: DynamoDbContext &
-      DynamoDbStorageContext &
-      EcsBaseContext &
-      TimeContext,
+    context:
+      & DynamoDbContext
+      & DynamoDbStorageContext
+      & EcsBaseContext
+      & TimeContext,
   ) {
     this.client = context.aws.dynamoDb
     this.clusterId = context.clusterId
-    this.dynamoStreams = context.aws.dynamoStreams
     this.components = context.components
     this.returnConsumedCapacity =
       context.storage.dynamodb.config.returnConsumedCapacity
     this.time = context.service.time
+    this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
   }
 
   getTableName(componentName: string) {
@@ -74,10 +82,10 @@ export class DynamoDbStorage {
     return this.components[componentName].schema
   }
 
-  async read(
+  async read<T>(
     componentName: string,
     entityId: string,
-  ): Promise<unknown | undefined> {
+  ): Promise<T | undefined> {
     const result = await this.client.get({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
@@ -85,7 +93,51 @@ export class DynamoDbStorage {
         entityId,
       },
     })
-    return result.Item?.component
+    return result?.Item?.component
+  }
+
+  async batchRead<T>(
+    componentName: string,
+    entityIds: string[],
+  ): Promise<{
+    components: { [entityId: string]: T | undefined }
+    unprocessed: string[]
+  }> {
+    const tableName = this.getTableName(componentName)
+
+    const components: { [entityId: string]: T | undefined } = {}
+    const unprocessed: string[] = []
+
+    const ids = [...entityIds]
+    const responses: Promise<BatchGetCommandOutput>[] = []
+    while (ids.length) {
+      const batch = ids.splice(0, this.batchSize)
+      responses.push(
+        this.client.batchGet({
+          ReturnConsumedCapacity: this.returnConsumedCapacity,
+          RequestItems: {
+            [tableName]: {
+              Keys: batch.map((v) => ({ entityId: v })),
+            },
+          },
+        }),
+      )
+    }
+
+    const results = await Promise.all(responses)
+    for (const result of results) {
+      for (const row of result.Responses?.[tableName] ?? []) {
+        components[row.entityId] = row.component
+      }
+      for (const key of result.UnprocessedKeys?.[tableName]?.Keys ?? []) {
+        unprocessed.push(key.entityId.S)
+      }
+    }
+
+    return {
+      components,
+      unprocessed,
+    }
   }
 
   async getByKey(componentName: string, key: string) {
@@ -106,14 +158,21 @@ export class DynamoDbStorage {
       },
       ScanIndexForward: true,
     })
+    if ((result.Items?.length ?? 0) > 1) {
+      throw new Error('key found more than once')
+    }
     return result.Items?.[0]?.entityId
   }
 
-  async all(componentName: string) {
+  async all(
+    componentName: string,
+    exclusiveStartKey?: Record<string, unknown>,
+  ) {
     const tableName = this.getTableName(componentName)
     return await this.client.scan({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: tableName,
+      ExclusiveStartKey: exclusiveStartKey,
     })
   }
 
@@ -131,6 +190,53 @@ export class DynamoDbStorage {
       },
     })
     return lastModified
+  }
+
+  async batchWrite(componentName: string, writes: BatchWrite<unknown>[]) {
+    const tableName = this.getTableName(componentName)
+
+    const lastModifiedByEntityId: { [entityId: string]: number } = {}
+    const unprocessed: string[] = []
+
+    const responses: Promise<BatchWriteCommandOutput>[] = []
+    const ops = [...writes]
+    while (ops.length) {
+      const batch = ops.splice(0, this.batchSize)
+
+      const requests = []
+      for (const { entityId, component } of batch) {
+        const lastModified = this.time.now
+        const lastModifiedDate = this.getDateString(lastModified)
+        lastModifiedByEntityId[entityId] = lastModified
+        requests.push({
+          PutRequest: {
+            Item: {
+              entityId,
+              component,
+              lastModifiedDate,
+              lastModified,
+            },
+          },
+        })
+      }
+      responses.push(
+        this.client.batchWrite({
+          ReturnConsumedCapacity: this.returnConsumedCapacity,
+          RequestItems: {
+            [tableName]: requests,
+          },
+        }),
+      )
+    }
+
+    const results = await Promise.all(responses)
+    for (const result of results) {
+      for (const item of result.UnprocessedItems?.[tableName] ?? []) {
+        unprocessed.push(item.PutRequest?.Item?.entityId.S)
+      }
+    }
+
+    return { unprocessed, lastModifiedByEntityId }
   }
 
   async conditionalWrite(
@@ -160,7 +266,11 @@ export class DynamoDbStorage {
     return lastModified
   }
 
-  async updates(componentName: string, lastModified: number) {
+  async updates(
+    componentName: string,
+    lastModified: number,
+    exclusiveStartKey?: Record<string, unknown>,
+  ) {
     const tracksUpdates = this.components[componentName].tracksUpdates
     if (!tracksUpdates) {
       throw new Error(
@@ -173,12 +283,14 @@ export class DynamoDbStorage {
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: tableName,
       IndexName: `${tableName}_update_index`,
-      KeyConditionExpression: `lastModifiedDate = :bucket and lastModified > :cursor`,
+      KeyConditionExpression:
+        `lastModifiedDate = :lastModifiedDate and lastModified > :lastModified`,
       ExpressionAttributeValues: {
-        ':bucket': lastModifiedDate,
-        ':cursor': lastModified,
+        ':lastModifiedDate': lastModifiedDate,
+        ':lastModified': lastModified,
       },
       ScanIndexForward: true,
+      ExclusiveStartKey: exclusiveStartKey,
     })
   }
 
@@ -187,13 +299,18 @@ export class DynamoDbStorage {
     return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`
   }
 
-  datesAfter(datum: number): Date[] {
-    const days = differenceInDays(this.time.now, datum)
-    const result: Date[] = []
-    let current = startOfDay(datum)
+  /**
+   * Returns a list of cursors greater than lastModified for each bucket
+   * @param lastModified the first cursor to consider
+   * @returns list of cursors
+   */
+  cursorsOf(lastModified: number): number[] {
+    const result = [lastModified]
+    const days = differenceInDays(this.time.now, lastModified)
+    let current = startOfDay(lastModified)
     for (let i = 0; i < days; i++) {
       current = addDays(current, 1)
-      result.push(current)
+      result.push(current.valueOf())
     }
     return result
   }
@@ -208,6 +325,7 @@ export class DynamoDbStorage {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
     await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
       Key: {
         entityId,
@@ -238,6 +356,7 @@ export class DynamoDbStorage {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
     await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
       Key: {
         entityId,
@@ -269,6 +388,7 @@ export class DynamoDbStorage {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
     await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
       Key: {
         entityId,

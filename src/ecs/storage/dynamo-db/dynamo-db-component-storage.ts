@@ -1,13 +1,12 @@
 import { ComponentStorage } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
-import { Schema, json } from '@spaceteams/zap'
+import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing } from './schema-parse'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 
 export class DynamoDbComponentStorage<T>
   extends AbstractDynamoDbComponentStorage<T, string>
-  implements ComponentStorage<T>
-{
+  implements ComponentStorage<T> {
   constructor(componentName: string, storage: DynamoDbStorage) {
     super(componentName, storage)
   }

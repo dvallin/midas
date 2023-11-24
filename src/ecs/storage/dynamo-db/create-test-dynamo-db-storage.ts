@@ -13,17 +13,14 @@ export function createTestDynamoDbStorage(
 ) {
   return pipeline()
     .use(
-      dynamoDbClientMiddleware(
-        {
-          region: 'us-east-1',
-          endpoint: process.env.LOCALSTACK_ENDPOINT,
-        },
-        { region: 'us-east-1', endpoint: process.env.LOCALSTACK_ENDPOINT },
-      ),
+      dynamoDbClientMiddleware({
+        region: 'us-east-1',
+        endpoint: process.env.LOCALSTACK_ENDPOINT,
+      }),
     )
     .use(ecsBaseMiddleware(clusterId, components))
     .use(timeMiddleware(new MockTime()))
-    .use(dynamoDbStorageContextMiddleware())
+    .use(dynamoDbStorageContextMiddleware('TOTAL'))
     .use((_e, c) => ({
       context: c,
       storage: new DynamoDbStorage(c),

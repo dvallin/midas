@@ -4,8 +4,7 @@ import { DynamoDbStorage } from './dynamo-db-storage'
 
 export class DynamoDbKeyStorage
   extends AbstractDynamoDbComponentStorage<string, string>
-  implements KeyStorage
-{
+  implements KeyStorage {
   constructor(componentName: string, storage: DynamoDbStorage) {
     super(componentName, storage)
   }

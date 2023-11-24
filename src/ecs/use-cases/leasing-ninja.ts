@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ComponentStorage, KeyStorage } from '../storage'
-import { InferType, coercedDate, number, object } from '@spaceteams/zap'
+import { coercedDate, InferType, number, object } from '@spaceteams/zap'
 import { nanoid } from 'nanoid'
-import { getById } from '../service/get-by-id'
+import { Query } from '../service/queries'
 
 export const ContractSchema = object({
   customerId: number(),
@@ -73,11 +73,12 @@ async function showContract(
   { contractKeys, contracts, installments, signatures }: LeasingNinjaContext,
 ) {
   const id = await contractKeys.getByKeyOrThrow(key.toString())
-  const { contract, installment, signature } = await getById(id, {
+  const query = new Query({
     contract: contracts,
     installment: installments,
     signature: signatures,
   })
+  const { contract, installment, signature } = await query.getById(id)
   if (!contract) {
     throw new Error('contract missing')
   }

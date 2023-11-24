@@ -1,6 +1,6 @@
 import { DynamoDbSetStorage } from './dynamo-db-set-storage'
 import productCategoriesUsecase from '../../use-cases/product-categories'
-import { beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll } from 'vitest'
 import { InMemoryComponentStorage } from '../in-memory'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import setStorageSpec from '../set-storage-spec'

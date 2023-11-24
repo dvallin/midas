@@ -1,12 +1,14 @@
 import { Client } from '@elastic/elasticsearch'
 import { Time, TimeContext } from '../../service/time'
 import { ElasticsearchContext } from '../../../middleware/elasticsearch/elasticsearch-middleware'
-import { EcsBaseContext } from '../..'
+import { BatchWrite, EcsBaseContext } from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
 
-export type ElasticsearchStorageContext = ElasticsearchContext &
-  EcsBaseContext &
-  TimeContext & {
+export type ElasticsearchStorageContext =
+  & ElasticsearchContext
+  & EcsBaseContext
+  & TimeContext
+  & {
     storage: {
       elastic: {
         config: {
@@ -38,21 +40,40 @@ export class ElasticsearchStorage {
   protected readonly client: Client
   protected readonly time: Time
   protected readonly alwaysRefresh: boolean
+  protected readonly batchSize: number
   constructor(protected readonly context: ElasticsearchStorageContext) {
     this.client = context.elastic.client
     this.time = context.service.time
     this.alwaysRefresh = context.storage.elastic.config.alwaysRefresh ?? false
+    this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
   }
 
   getIndex(componentName: string) {
     return `components_${componentName}`.toLocaleLowerCase()
   }
 
-  async read<T>(componentName: string, entityId: string) {
+  read<T>(componentName: string, entityId: string) {
     return this.client.get<{ component: T }>({
       id: entityId,
       index: this.getIndex(componentName),
     })
+  }
+
+  async batchRead<T>(componentName: string, entityIds: string[]) {
+    type Result = Awaited<ReturnType<typeof this.client.mget<{ component: T }>>>
+    const docs: Result['docs'] = []
+
+    const ids = [...entityIds]
+    while (ids.length) {
+      const batch = ids.splice(0, this.batchSize)
+      const result = await this.client.mget<{ component: T }>({
+        ids: batch,
+        index: this.getIndex(componentName),
+      })
+
+      docs.push(...result.docs)
+    }
+    return { docs } as Result
   }
 
   async write<T>(
@@ -69,6 +90,36 @@ export class ElasticsearchStorage {
       upsert: { component, lastModified },
     })
     return { cursor: lastModified.toString() }
+  }
+
+  async batchWrite<T>(componentName: string, writes: BatchWrite<T>[]) {
+    const operations: Record<string, unknown>[] = []
+    const lastModifiedByEntityId: { [entityId: string]: number } = {}
+
+    const ops = [...writes]
+    while (ops.length) {
+      const batch = ops.splice(0, this.batchSize)
+
+      for (const { entityId, component } of batch) {
+        const lastModified = this.time.now
+        operations.push({
+          index: {
+            _index: this.getIndex(componentName),
+            _id: entityId,
+          },
+        })
+        lastModifiedByEntityId[entityId] = lastModified
+        operations.push({ component, lastModified })
+      }
+      await this.client.bulk<{
+        component: T
+        lastModified: number
+      }>({
+        refresh: this.alwaysRefresh,
+        operations,
+      })
+    }
+    return { lastModifiedByEntityId }
   }
 
   async conditionalWrite<T>(
@@ -105,7 +156,7 @@ export class ElasticsearchStorage {
         upsert: { component: current, lastModified },
       })
     } catch (e) {
-      throw new Error('conditional write failed')
+      throw new Error('conditional write failed', { cause: e })
     }
     return { cursor: lastModified.toString() }
   }
@@ -116,6 +167,7 @@ export class ElasticsearchStorage {
       lastModified: number
     }>({
       index: this.getIndex(componentName),
+      size: 100,
       query: {
         range: {
           lastModified: {

@@ -9,7 +9,7 @@ export class ElasticsearchUpdateStorage implements UpdateStorage {
 
   async *updates(
     cursor?: string,
-  ): AsyncGenerator<{ entityId: string; cursor: string }, any, unknown> {
+  ): AsyncGenerator<{ entityId: string; cursor: string }> {
     const result = await this.storage.updates(
       this.componentName,
       parseFloat(cursor ?? '0'),

@@ -1,4 +1,9 @@
-import { ComponentStorage } from '..'
+import {
+  BatchReadResult,
+  BatchWrite,
+  BatchWriteResult,
+  ComponentStorage,
+} from '..'
 import { Time } from '../../service/time'
 
 export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
@@ -34,15 +39,39 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     return Promise.resolve({ cursor: lastModified.toString() })
   }
 
-  async conditionalWrite(
+  conditionalWrite(
     entityId: string,
     current: T,
     previous: T | undefined,
   ): Promise<{ cursor: string }> {
     const value = this.storage[entityId]
     if (JSON.stringify(value?.component) !== JSON.stringify(previous)) {
-      throw new Error('conditional write failed')
+      return Promise.reject(new Error('conditional write failed'))
     }
     return this.write(entityId, current)
+  }
+
+  batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {
+    const result: BatchReadResult<T> = {}
+    for (const id of entityIds) {
+      result[id] = {
+        value: this.storage[id]?.component,
+      }
+    }
+    return Promise.resolve(result)
+  }
+
+  batchWrite(writes: BatchWrite<T>[]): Promise<BatchWriteResult> {
+    const result: BatchWriteResult = {}
+
+    for (const { entityId, component } of writes) {
+      const lastModified = this.time.now
+      result[entityId] = {
+        cursor: lastModified?.toString(),
+      }
+      this.storage[entityId] = { component, lastModified }
+    }
+
+    return Promise.resolve(result)
   }
 }

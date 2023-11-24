@@ -37,6 +37,6 @@ export class Pipeline<
   }
 }
 
-export function pipeline<TEvent, TContext = {}>() {
+export function pipeline<TEvent, TContext = Record<string, unknown>>() {
   return new Pipeline<TEvent, TContext>([])
 }
