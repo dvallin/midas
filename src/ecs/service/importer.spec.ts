@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { Importer } from './importer'
-import { InMemoryComponentStorage, InMemoryUpdateStorage } from '../storage'
+import { InMemoryComponentStorage, InMemoryUpdateStorage } from '../component'
 
 const storage = new InMemoryUpdateStorage<string>()
 await storage.write('1', 'component-1')

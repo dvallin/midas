@@ -1,4 +1,5 @@
-import { ComponentStorage, InferComponentType } from '../storage'
+import { EntityId } from '../entity'
+import { ComponentStorage, InferComponentType } from '../component'
 
 type Storages = { [componentName: string]: ComponentStorage<unknown> }
 
@@ -6,14 +7,14 @@ export type GetResult<T extends Storages> = {
   [key in keyof T]: InferComponentType<T[key]> | undefined
 }
 export type GetManyResult<T extends Storages> = {
-  [entityId: string]: GetResult<T>
+  [entityId: EntityId]: GetResult<T>
 }
 
 export class Query<T extends Storages> {
   constructor(protected readonly storages: T) {}
 
-  async getById(entityId: string): Promise<GetResult<T>> {
-    const result: Record<string, unknown> = {}
+  async getById(entityId: EntityId): Promise<GetResult<T>> {
+    const result: Record<EntityId, unknown> = {}
     const componentNames = Object.keys(this.storages)
     const requests = []
     for (const componentName of componentNames) {
@@ -26,8 +27,8 @@ export class Query<T extends Storages> {
     return result as GetResult<T>
   }
 
-  async getManyById(entityIds: string[]): Promise<GetManyResult<T>> {
-    const result: Record<string, Record<string, unknown>> = {}
+  async getManyById(entityIds: EntityId[]): Promise<GetManyResult<T>> {
+    const result: Record<EntityId, Record<string, unknown>> = {}
     for (const id of entityIds) {
       result[id] = {}
     }

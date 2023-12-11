@@ -1,8 +1,9 @@
 import { Client } from '@elastic/elasticsearch'
 import { Time, TimeContext } from '../../service/time'
 import { ElasticsearchContext } from '../../../middleware/elasticsearch/elasticsearch-middleware'
-import { BatchWrite, EcsBaseContext } from '../..'
+import { EcsBaseContext } from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
+import { BatchWrite } from '..'
 
 export type ElasticsearchStorageContext =
   & ElasticsearchContext

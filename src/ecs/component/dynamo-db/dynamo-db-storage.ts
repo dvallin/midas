@@ -14,8 +14,9 @@ import {
   ReturnConsumedCapacity,
 } from '@aws-sdk/client-dynamodb'
 import { Time, TimeContext } from '../../service/time'
-import { BatchWrite, EcsBaseContext } from '../..'
+import { EcsBaseContext } from '../..'
 import { addDays, differenceInDays, startOfDay } from 'date-fns'
+import { BatchWrite } from '..'
 
 export type DynamoDbStorageContext =
   & DynamoDbContext
@@ -85,7 +86,7 @@ export class DynamoDbStorage {
   async read<T>(
     componentName: string,
     entityId: string,
-  ): Promise<T | undefined> {
+  ): Promise<T | undefined | null> {
     const result = await this.client.get({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
@@ -93,19 +94,22 @@ export class DynamoDbStorage {
         entityId,
       },
     })
-    return result?.Item?.component
+    if (result.Item === undefined) {
+      return undefined
+    }
+    return result.Item?.component ?? null
   }
 
   async batchRead<T>(
     componentName: string,
     entityIds: string[],
   ): Promise<{
-    components: { [entityId: string]: T | undefined }
+    components: { [entityId: string]: T | undefined | null }
     unprocessed: string[]
   }> {
     const tableName = this.getTableName(componentName)
 
-    const components: { [entityId: string]: T | undefined } = {}
+    const components: { [entityId: string]: T | undefined | null } = {}
     const unprocessed: string[] = []
 
     const ids = [...entityIds]
@@ -127,7 +131,7 @@ export class DynamoDbStorage {
     const results = await Promise.all(responses)
     for (const result of results) {
       for (const row of result.Responses?.[tableName] ?? []) {
-        components[row.entityId] = row.component
+        components[row.entityId] = row.component ?? null
       }
       for (const key of result.UnprocessedKeys?.[tableName]?.Keys ?? []) {
         unprocessed.push(key.entityId.S)
@@ -331,26 +335,26 @@ export class DynamoDbStorage {
         entityId,
       },
       UpdateExpression:
-        'SET #component.boxed = list_append(#component.boxed, :values), lastModified = :lastModified, lastModifiedDate = :lastModifiedDate',
+        'SET #component = list_append(if_not_exists(#component, :empty_list), :value), lastModified = :lastModified, lastModifiedDate = :lastModifiedDate',
       ExpressionAttributeNames: {
         '#component': 'component',
       },
       ExpressionAttributeValues: {
-        ':values': [component],
+        ':empty_list': [],
+        ':value': [component],
         ':lastModified': lastModified,
         ':lastModifiedDate': lastModifiedDate,
       },
-      ConditionExpression: 'attribute_exists(component)',
       ReturnValues: 'NONE',
     })
     return lastModified
   }
 
-  async add(componentName: string, entityId: string, component: unknown) {
+  async remove(componentName: string, entityId: string, index: number) {
     const componentType = this.components[componentName].type
-    if (componentType !== 'set') {
+    if (componentType !== 'array') {
       throw new Error(
-        `cannot perform a setadd on component ${componentName} of type ${componentType}`,
+        `cannot perform a array:remove on component ${componentName} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -361,7 +365,37 @@ export class DynamoDbStorage {
       Key: {
         entityId,
       },
-      UpdateExpression: `ADD #component.boxed :value
+      UpdateExpression: `REMOVE #component[${index}]
+       SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate`,
+      ExpressionAttributeNames: {
+        '#component': 'component',
+      },
+      ExpressionAttributeValues: {
+        ':lastModified': lastModified,
+        ':lastModifiedDate': lastModifiedDate,
+      },
+      ConditionExpression: 'attribute_exists(component)',
+      ReturnValues: 'NONE',
+    })
+    return lastModified
+  }
+
+  async add(componentName: string, entityId: string, component: string) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'set') {
+      throw new Error(
+        `cannot perform a set:add on component ${componentName} of type ${componentType}`,
+      )
+    }
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Key: {
+        entityId,
+      },
+      UpdateExpression: `ADD #component :value
          SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
         `,
       ExpressionAttributeNames: {
@@ -372,17 +406,20 @@ export class DynamoDbStorage {
         ':lastModified': lastModified,
         ':lastModifiedDate': lastModifiedDate,
       },
-      ConditionExpression: 'attribute_exists(component)',
       ReturnValues: 'NONE',
     })
     return lastModified
   }
 
-  async delete(componentName: string, entityId: string, component: unknown) {
+  async conditionalAdd(
+    componentName: string,
+    entityId: string,
+    component: string,
+  ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
-        `cannot perform a set delete on component ${componentName} of type ${componentType}`,
+        `cannot perform a conditional set:add on component ${componentName} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -393,7 +430,40 @@ export class DynamoDbStorage {
       Key: {
         entityId,
       },
-      UpdateExpression: `DELETE #component.boxed :value
+      UpdateExpression: `ADD #component :value
+         SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
+        `,
+      ExpressionAttributeNames: {
+        '#component': 'component',
+      },
+      ExpressionAttributeValues: {
+        ':val': component,
+        ':value': new Set([component]),
+        ':lastModified': lastModified,
+        ':lastModifiedDate': lastModifiedDate,
+      },
+      ConditionExpression: 'not contains(#component, :val)',
+      ReturnValues: 'NONE',
+    })
+    return lastModified
+  }
+
+  async delete(componentName: string, entityId: string, component: string) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'set') {
+      throw new Error(
+        `cannot perform a set:delete on component ${componentName} of type ${componentType}`,
+      )
+    }
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Key: {
+        entityId,
+      },
+      UpdateExpression: `DELETE #component :value
         SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
         `,
       ExpressionAttributeNames: {
@@ -404,7 +474,43 @@ export class DynamoDbStorage {
         ':lastModified': lastModified,
         ':lastModifiedDate': lastModifiedDate,
       },
-      ConditionExpression: 'attribute_exists(component)',
+      ReturnValues: 'NONE',
+    })
+    return lastModified
+  }
+
+  async conditionalDelete(
+    componentName: string,
+    entityId: string,
+    component: string,
+  ) {
+    const componentType = this.components[componentName].type
+    if (componentType !== 'set') {
+      throw new Error(
+        `cannot perform a conditional set:delete on component ${componentName} of type ${componentType}`,
+      )
+    }
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Key: {
+        entityId,
+      },
+      UpdateExpression: `DELETE #component :value
+        SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
+        `,
+      ExpressionAttributeNames: {
+        '#component': 'component',
+      },
+      ExpressionAttributeValues: {
+        ':val': component,
+        ':value': new Set([component]),
+        ':lastModified': lastModified,
+        ':lastModifiedDate': lastModifiedDate,
+      },
+      ConditionExpression: 'contains(#component, :val)',
       ReturnValues: 'NONE',
     })
     return lastModified

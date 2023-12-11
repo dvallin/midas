@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ComponentStorage, KeyStorage } from '../storage'
+import { component, entity, service } from '..'
 import { coercedDate, InferType, number, object } from '@spaceteams/zap'
-import { nanoid } from 'nanoid'
-import { Query } from '../service/queries'
 
 export const ContractSchema = object({
   customerId: number(),
@@ -37,17 +35,18 @@ export const SignatureSchema = object({
 type Signature = InferType<typeof SignatureSchema>
 
 type LeasingNinjaContext = {
-  contracts: ComponentStorage<Contract>
-  contractKeys: KeyStorage
-  installments: ComponentStorage<Installment & CalculatedInstallment>
-  signatures: ComponentStorage<Signature>
+  contracts: component.ComponentStorage<Contract>
+  contractKeys: component.KeyStorage
+  installments: component.ComponentStorage<Installment & CalculatedInstallment>
+  signatures: component.ComponentStorage<Signature>
+  idGenerator: entity.EntityIdGenerator
 }
 async function addContract(
   key: ContractKey,
   contract: Contract,
-  { contracts, contractKeys }: LeasingNinjaContext,
+  { contracts, contractKeys, idGenerator }: LeasingNinjaContext,
 ) {
-  const id = nanoid()
+  const id = idGenerator.generate()
   await contracts.write(id, contract)
   await contractKeys.write(id, key.toString())
 }
@@ -73,7 +72,7 @@ async function showContract(
   { contractKeys, contracts, installments, signatures }: LeasingNinjaContext,
 ) {
   const id = await contractKeys.getByKeyOrThrow(key.toString())
-  const query = new Query({
+  const query = new service.Query({
     contract: contracts,
     installment: installments,
     signature: signatures,

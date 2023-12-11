@@ -1,39 +1,47 @@
 import { describe, expect, it } from 'vitest'
-import { SetStorage } from '.'
+import { ArrayStorage } from '.'
 
-export default function spec(provider: () => SetStorage<string>) {
+export default function spec(provider: () => ArrayStorage<string>) {
   it('reads and writes', async () => {
     const storage = provider()
     await storage.write('read-and-write', ['1', '2'])
     expect(await storage.read('read-and-write')).toEqual(['1', '2'])
   })
-  it('adds values', async () => {
+  it('writes and then pushes', async () => {
     const storage = provider()
-    await storage.write('add-value', ['1'])
-    await storage.add('add-value', '2')
-    await storage.add('add-value', '2')
-    expect(await storage.read('add-value')).toEqual(['1', '2'])
+    await storage.write('write-and-push', ['1'])
+    await storage.push('write-and-push', '2')
+    expect(await storage.read('write-and-push')).toEqual(['1', '2'])
   })
-  it('deletes values', async () => {
+  it('inserts on pushes', async () => {
     const storage = provider()
-    await storage.write('delete-value', ['1'])
-    await storage.delete('delete-value', '1')
-    expect(await storage.read('delete-value')).toEqual([])
+    await storage.push('insert-on-push', '1')
+    await storage.push('insert-on-push', '2')
+    expect(await storage.read('insert-on-push')).toEqual(['1', '2'])
   })
-  it('inserts on add', async () => {
+  it('removes at index', async () => {
     const storage = provider()
-    await storage.add('insert-on-add', '1')
-    await storage.add('insert-on-add', '2')
-    expect(await storage.read('insert-on-add')).toEqual(['1', '2'])
+    await storage.write('remove-at-index', ['0', '1', '2'])
+    await storage.remove('remove-at-index', 1)
+    expect(await storage.read('remove-at-index')).toEqual(['0', '2'])
+  })
+  it('removes to empty', async () => {
+    const storage = provider()
+    await storage.write('remove-to-empty', ['0'])
+    await storage.remove('remove-to-empty', 0)
+    expect(await storage.read('remove-to-empty')).toEqual([])
+  })
+  it('removes out of bounds', async () => {
+    const storage = provider()
+    await storage.write('remove-out-of-bound', ['0'])
+    await storage.remove('remove-out-of-bound', 1)
   })
   describe('conditional writes', () => {
     it('writes if value is the same', async () => {
       const storage = provider()
       await storage.write('write-if-present', ['1', '2'])
       await storage.conditionalWrite('write-if-present', ['3', '2'], ['1', '2'])
-      expect(await storage.read('write-if-present')).toEqual(
-        expect.arrayContaining(['3', '2']),
-      )
+      expect(await storage.read('write-if-present')).toEqual(['3', '2'])
     })
     it('fails if value is different', async () => {
       const storage = provider()

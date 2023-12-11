@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ComponentStorage, SetStorage } from '../storage'
-import { Linker } from '../service/linker'
-import { TreeLinker } from '../service/tree-linker'
+import { component, service } from '..'
 
 export type Category = {
   parent?: string
@@ -9,9 +7,9 @@ export type Category = {
 }
 export default function (
   provider: () => {
-    categories: ComponentStorage<Category>
-    productToCategories: SetStorage<string>
-    categoryToProducts: SetStorage<string>
+    categories: component.ComponentStorage<Category>
+    productToCategories: component.SetStorage<string>
+    categoryToProducts: component.SetStorage<string>
   },
 ) {
   describe('product-categories-usecase', () => {
@@ -19,7 +17,7 @@ export default function (
       // given
       const { productToCategories, categoryToProducts } = provider()
 
-      const linker = new Linker(productToCategories, categoryToProducts)
+      const linker = new service.Linker(productToCategories, categoryToProducts)
       await linker.link('1', 'cat-1')
       await linker.link('2', 'cat-1')
       await linker.link('2', 'cat-2')
@@ -37,7 +35,7 @@ export default function (
       // given
       const { productToCategories, categoryToProducts } = provider()
 
-      const linker = new Linker(productToCategories, categoryToProducts)
+      const linker = new service.Linker(productToCategories, categoryToProducts)
       await linker.link('1', 'cat-1')
       await linker.unlink('1', 'cat-1')
 
@@ -60,9 +58,9 @@ export default function (
         name: 'cat-3',
       })
 
-      const linker = new TreeLinker(
+      const linker = new service.TreeLinker(
         categories,
-        new Linker(productToCategories, categoryToProducts),
+        new service.Linker(productToCategories, categoryToProducts),
       )
       await linker.link('1', 'cat-1')
       await linker.link('2', 'cat-3')

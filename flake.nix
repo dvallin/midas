@@ -15,7 +15,7 @@
       {
         devShell = pkgs.mkShell {
           name = "frontend";
-          packages = with pkgs; [ pre-commit unstable.nodejs unstable.deno ];
+          packages = with pkgs; [ pre-commit unstable.nodejs unstable.deno unstable.pulumi ];
           postShellHook = ''
             ${pkgs.pre-commit}/bin/pre-commit install
             export PATH="$PWD/node_modules/.bin/:$PATH"

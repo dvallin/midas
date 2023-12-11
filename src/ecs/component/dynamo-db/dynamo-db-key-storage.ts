@@ -13,8 +13,8 @@ export class DynamoDbKeyStorage
     return value
   }
 
-  decode(value: string): string {
-    return value
+  decode(value: string | null): string {
+    return value ?? ''
   }
 
   getByKey(key: string): Promise<string | undefined> {

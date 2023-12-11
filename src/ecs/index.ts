@@ -1,8 +1,9 @@
 import { Schema } from '@spaceteams/zap'
 import { ContextExtensionMiddleware } from '../middleware'
 
-export * from './service'
-export * from './storage'
+export * as entity from './entity'
+export * as service from './service'
+export * as component from './component'
 
 export type EcsBaseContext = {
   clusterId: string

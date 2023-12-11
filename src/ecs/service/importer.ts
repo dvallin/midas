@@ -1,7 +1,8 @@
 import { Schema } from '@spaceteams/zap'
-import { ComponentStorage, UpdateStorage } from '../storage'
+import { ComponentStorage, UpdateStorage } from '../component'
 import { Batcher } from './batcher'
 import { Query } from './queries'
+import { EntityId } from '../entity'
 
 export type ImporterConfig<T> = {
   name: string
@@ -28,7 +29,10 @@ export class Importer<T> {
   }
 
   async runImport(
-    onEntity: (entityId: string, component: T | undefined) => Promise<unknown>,
+    onEntity: (
+      entityId: EntityId,
+      component: T | undefined,
+    ) => Promise<unknown>,
   ) {
     const startCursor = await this.cursors.read(this.importName)
 
@@ -63,7 +67,7 @@ export class Importer<T> {
 
   runImportWithSchema<I, O = I>(
     schema: Schema<I, O>,
-    onEntity: (entityId: string, components: O) => Promise<unknown>,
+    onEntity: (entityId: EntityId, components: O) => Promise<unknown>,
   ) {
     return this.runImport(async (entityId, components) => {
       const { parsedValue } = schema.parse(components)

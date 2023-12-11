@@ -10,6 +10,7 @@ import leasingNinjaUseCase, {
 import keyStorageSpec from '../key-storage-spec'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import { string } from '@spaceteams/zap'
+import { UuidGenerator } from '../../entity'
 
 const { storage } = await createTestDynamoDbStorage('dynamo-db-key-storage', {
   keyStorageSpec: { type: 'key', tracksUpdates: false, schema: string() },
@@ -41,4 +42,5 @@ leasingNinjaUseCase(() => ({
     storage,
   ),
   signatures: new DynamoDbComponentStorage('signatures', storage),
+  idGenerator: new UuidGenerator(),
 }))

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { ZipImporter } from './zip-importer'
-import { InMemoryComponentStorage, InMemoryUpdateStorage } from '../storage'
 import { InferType, object, optional, string } from '@spaceteams/zap'
+import { InMemoryComponentStorage, InMemoryUpdateStorage } from '../component'
 
 const storage = new InMemoryUpdateStorage<string>()
 await storage.write('1', 'component-1')

@@ -9,4 +9,11 @@ export class InMemoryArrayStorage<T> extends InMemoryComponentStorage<T[]>
     current.push(component)
     return this.conditionalWrite(entityId, Array.from(current), value)
   }
+
+  async remove(entityId: string, index: number): Promise<{ cursor: string }> {
+    const value = await this.read(entityId)
+    const current = value ?? []
+    current.splice(index, 1)
+    return this.conditionalWrite(entityId, Array.from(current), value)
+  }
 }

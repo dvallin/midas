@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest'
-import { ArrayStorage, ComponentStorage } from '../storage'
+import { component } from '..'
 import {
   array,
   discriminatedUnion,
@@ -31,8 +31,8 @@ export type CartEvent = InferType<typeof CartEventSchema>
 
 export default function (
   provider: () => {
-    carts: ComponentStorage<Cart>
-    cartEvents: ArrayStorage<CartEvent>
+    carts: component.ComponentStorage<Cart>
+    cartEvents: component.ArrayStorage<CartEvent>
   },
 ) {
   describe('simple shopping cart usecase', () => {

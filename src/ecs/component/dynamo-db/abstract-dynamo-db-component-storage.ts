@@ -15,7 +15,7 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
   ) {}
 
   abstract encode(value: T): E
-  abstract decode(value: E): T
+  abstract decode(value: E | null): T
 
   async read(entityId: string): Promise<T | undefined> {
     const result = await this.storage.read<E>(this.componentName, entityId)

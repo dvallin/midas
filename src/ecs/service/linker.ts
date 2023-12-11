@@ -1,18 +1,19 @@
-import { SetStorage } from '../storage'
+import { EntityId } from '../entity'
+import { SetStorage } from '../component'
 
 export class Linker {
   constructor(
-    private readonly from: SetStorage<string>,
-    private readonly to?: SetStorage<string>,
+    private readonly from: SetStorage<EntityId>,
+    private readonly to?: SetStorage<EntityId>,
   ) {}
 
-  async link(from: string, to: string): Promise<void> {
+  async link(from: EntityId, to: EntityId): Promise<void> {
     await this.from.add(from, to)
     if (this.to) {
       await this.to.add(to, from)
     }
   }
-  async unlink(from: string, to: string): Promise<void> {
+  async unlink(from: EntityId, to: EntityId): Promise<void> {
     await this.from.delete(from, to)
     if (this.to) {
       await this.to.delete(to, from)
