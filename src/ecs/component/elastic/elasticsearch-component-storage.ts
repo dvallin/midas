@@ -4,26 +4,60 @@ import {
   BatchWriteResult,
   ComponentStorage,
 } from '..'
+import { ComponentConfig } from '../..'
 import { ElasticsearchStorage } from './elasticsearch-storage'
 
-export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
+type ResponseError = {
+  name: 'ResponseError'
+  meta: {
+    body: { _index: string; _type: string; _id: string; found: boolean }
+    statusCode: number
+  }
+}
+
+function isResponseError(e: unknown): e is ResponseError {
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    'name' in e &&
+    e.name === 'ResponseError'
+  )
+}
+
+export class ElasticsearchComponentStorage<
+  T,
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> implements ComponentStorage<T> {
   constructor(
     protected readonly componentName: string,
-    protected readonly storage: ElasticsearchStorage,
-  ) {}
+    protected readonly storage: ElasticsearchStorage<Components>,
+  ) {
+    if (!storage.supports(componentName)) {
+      throw new Error(`${componentName} does not support elastic search`)
+    }
+  }
 
   getIndex() {
     return `components_${this.componentName}`.toLocaleLowerCase()
   }
 
-  async read(entityId: string): Promise<T | undefined> {
-    const result = await this.storage.read<T>(this.componentName, entityId)
-    return result._source?.component
+  async read(entityId: string): Promise<T | undefined | null> {
+    try {
+      const result = await this.storage.read<T>(this.componentName, entityId)
+      return result._source?.component
+    } catch (e) {
+      if (isResponseError(e) && !e.meta.body.found) {
+        return undefined
+      }
+      throw e
+    }
   }
 
   async readOrThrow(entityId: string): Promise<T> {
     const value = await this.read(entityId)
-    if (value === undefined) {
+    if (!value) {
       throw new Error(
         `could not find component ${this.componentName} for entity ${entityId}`,
       )
@@ -35,10 +69,18 @@ export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
     return this.storage.write(this.componentName, entityId, component)
   }
 
+  delete(entityId: string): Promise<{ cursor: string }> {
+    return this.storage.write(this.componentName, entityId, null)
+  }
+
+  async erase(entityId: string): Promise<void> {
+    await this.storage.delete(this.componentName, entityId)
+  }
+
   conditionalWrite(
     entityId: string,
     current: T,
-    previous: T | undefined,
+    previous: T | undefined | null,
   ): Promise<{ cursor: string }> {
     return this.storage.conditionalWrite(
       this.componentName,
@@ -46,6 +88,14 @@ export class ElasticsearchComponentStorage<T> implements ComponentStorage<T> {
       current,
       previous,
     )
+  }
+
+  async readBeforeWriteUpdate(
+    entityId: string,
+    updater: (previous: T | null | undefined) => T,
+  ): Promise<{ cursor: string }> {
+    const previous = await this.read(entityId)
+    return this.conditionalWrite(entityId, updater(previous), previous)
   }
 
   async batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {

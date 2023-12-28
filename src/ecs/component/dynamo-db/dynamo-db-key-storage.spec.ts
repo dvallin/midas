@@ -11,22 +11,39 @@ import keyStorageSpec from '../key-storage-spec'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import { string } from '@spaceteams/zap'
 import { UuidGenerator } from '../../entity'
+import { componentConfig, componentStorageConfig } from '../..'
 
 const { storage } = await createTestDynamoDbStorage('dynamo-db-key-storage', {
-  keyStorageSpec: { type: 'key', tracksUpdates: false, schema: string() },
-  contracts: { type: 'array', tracksUpdates: false, schema: ContractSchema },
-  contractKeys: { type: 'key', tracksUpdates: false, schema: string() },
-  installments: {
-    type: 'array',
-    tracksUpdates: false,
+  keyStorageSpec: componentConfig({
+    type: 'key',
+    schema: string(),
+    storageConfig: componentStorageConfig({ type: 'dynamo' }),
+  }),
+  contracts: componentConfig({
+    type: 'default',
+    schema: ContractSchema,
+    storageConfig: componentStorageConfig({ type: 'dynamo' }),
+  }),
+  contractKeys: componentConfig({
+    type: 'key',
+    schema: string(),
+    storageConfig: componentStorageConfig({ type: 'dynamo' }),
+  }),
+  installments: componentConfig({
+    type: 'default',
     schema: InstallmentSchema,
-  },
-  calculatedInstallements: {
-    type: 'array',
-    tracksUpdates: false,
+    storageConfig: componentStorageConfig({ type: 'dynamo' }),
+  }),
+  calculatedInstallements: componentConfig({
+    type: 'default',
     schema: CalculatedInstallmentSchema,
-  },
-  signatures: { type: 'array', tracksUpdates: false, schema: SignatureSchema },
+    storageConfig: componentStorageConfig({ type: 'dynamo' }),
+  }),
+  signatures: componentConfig({
+    type: 'default',
+    schema: SignatureSchema,
+    storageConfig: componentStorageConfig({ type: 'dynamo' }),
+  }),
 })
 
 beforeAll(() => storage.migrate())

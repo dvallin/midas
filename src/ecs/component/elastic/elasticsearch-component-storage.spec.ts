@@ -12,17 +12,22 @@ import {
   ElasticsearchStorage,
   elasticsearchStorageContextMiddleware,
 } from './elasticsearch-storage'
-import { ecsBaseMiddleware } from '../..'
+import {
+  componentConfig,
+  componentStorageConfig,
+  ecsBaseMiddleware,
+} from '../..'
 import { string } from '@spaceteams/zap'
 
 const storage = await pipeline()
   .use(
     ecsBaseMiddleware('cluster', {
-      componentStorageSpec: {
+      componentStorageSpec: componentConfig({
         type: 'default',
         tracksUpdates: true,
         schema: string(),
-      },
+        storageConfig: componentStorageConfig({ type: 'elastic' }),
+      }),
     }),
   )
   .use(timeMiddleware())

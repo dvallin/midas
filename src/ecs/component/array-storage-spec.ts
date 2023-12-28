@@ -10,31 +10,31 @@ export default function spec(provider: () => ArrayStorage<string>) {
   it('writes and then pushes', async () => {
     const storage = provider()
     await storage.write('write-and-push', ['1'])
-    await storage.push('write-and-push', '2')
+    await storage.arrayPush('write-and-push', '2')
     expect(await storage.read('write-and-push')).toEqual(['1', '2'])
   })
   it('inserts on pushes', async () => {
     const storage = provider()
-    await storage.push('insert-on-push', '1')
-    await storage.push('insert-on-push', '2')
+    await storage.arrayPush('insert-on-push', '1')
+    await storage.arrayPush('insert-on-push', '2')
     expect(await storage.read('insert-on-push')).toEqual(['1', '2'])
   })
   it('removes at index', async () => {
     const storage = provider()
     await storage.write('remove-at-index', ['0', '1', '2'])
-    await storage.remove('remove-at-index', 1)
+    await storage.arrayRemove('remove-at-index', 1)
     expect(await storage.read('remove-at-index')).toEqual(['0', '2'])
   })
   it('removes to empty', async () => {
     const storage = provider()
     await storage.write('remove-to-empty', ['0'])
-    await storage.remove('remove-to-empty', 0)
+    await storage.arrayRemove('remove-to-empty', 0)
     expect(await storage.read('remove-to-empty')).toEqual([])
   })
   it('removes out of bounds', async () => {
     const storage = provider()
     await storage.write('remove-out-of-bound', ['0'])
-    await storage.remove('remove-out-of-bound', 1)
+    await storage.arrayRemove('remove-out-of-bound', 1)
   })
   describe('conditional writes', () => {
     it('writes if value is the same', async () => {

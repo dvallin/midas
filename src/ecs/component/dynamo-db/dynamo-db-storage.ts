@@ -14,13 +14,17 @@ import {
   ReturnConsumedCapacity,
 } from '@aws-sdk/client-dynamodb'
 import { Time, TimeContext } from '../../service/time'
-import { EcsBaseContext } from '../..'
+import { ComponentConfig, EcsBaseContext, InferComponents } from '../..'
 import { addDays, differenceInDays, startOfDay } from 'date-fns'
 import { BatchWrite } from '..'
 
-export type DynamoDbStorageContext =
+export type DynamoDbStorageContext<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> =
   & DynamoDbContext
-  & EcsBaseContext
+  & EcsBaseContext<Components>
   & TimeContext
   & {
     storage: {
@@ -32,11 +36,17 @@ export type DynamoDbStorageContext =
     }
   }
 export const dynamoDbStorageContextMiddleware = <
-  C extends DynamoDbContext & EcsBaseContext & TimeContext,
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+  C extends DynamoDbContext & EcsBaseContext<Components> & TimeContext,
 >(
   returnConsumedCapacity?: ReturnConsumedCapacity,
   batchingSize?: number,
-): ContextExtensionMiddleware<C, DynamoDbStorageContext> => {
+): ContextExtensionMiddleware<
+  C,
+  DynamoDbStorageContext<InferComponents<C>>
+> => {
   return async (_e, ctx, next) => {
     const c = ctx as { storage?: Record<string, unknown> }
     if (!c.storage) {
@@ -48,24 +58,22 @@ export const dynamoDbStorageContextMiddleware = <
         batchingSize,
       },
     }
-    return await next(ctx as C & DynamoDbStorageContext)
+    return await next(ctx as C & DynamoDbStorageContext<InferComponents<C>>)
   }
 }
 
-export class DynamoDbStorage {
+export class DynamoDbStorage<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> {
   protected readonly client: DynamoDBDocument
-  protected readonly components: EcsBaseContext['components']
+  protected readonly components: EcsBaseContext<Components>['components']
   protected readonly returnConsumedCapacity?: ReturnConsumedCapacity
   protected readonly clusterId: string
   protected readonly time: Time
   protected readonly batchSize: number
-  constructor(
-    context:
-      & DynamoDbContext
-      & DynamoDbStorageContext
-      & EcsBaseContext
-      & TimeContext,
-  ) {
+  constructor(context: DynamoDbStorageContext<Components>) {
     this.client = context.aws.dynamoDb
     this.clusterId = context.clusterId
     this.components = context.components
@@ -73,6 +81,10 @@ export class DynamoDbStorage {
       context.storage.dynamodb.config.returnConsumedCapacity
     this.time = context.service.time
     this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
+  }
+
+  supports(componentName: string) {
+    return this.components[componentName].storageConfig.type === 'dynamo'
   }
 
   getTableName(componentName: string) {
@@ -180,6 +192,19 @@ export class DynamoDbStorage {
     })
   }
 
+  async allSchedules(
+    componentName: string,
+    exclusiveStartKey?: Record<string, unknown>,
+  ) {
+    const tableName = this.getTableName(componentName)
+    return await this.client.scan({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: tableName,
+      FilterExpression: 'attribute_exists(schedule)',
+      ExclusiveStartKey: exclusiveStartKey,
+    })
+  }
+
   async write(componentName: string, entityId: string, component: unknown) {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
@@ -194,6 +219,167 @@ export class DynamoDbStorage {
       },
     })
     return lastModified
+  }
+
+  async readSchedule(componentName: string, entityId: string) {
+    const result = await this.client.get({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Key: {
+        entityId,
+      },
+    })
+    if (result.Item === undefined) {
+      return undefined
+    }
+    return result.Item?.schedule ?? null
+  }
+
+  async batchReadSchedule(
+    componentName: string,
+    entityIds: string[],
+  ): Promise<{
+    schedules: { [entityId: string]: number | undefined | null }
+    unprocessed: string[]
+  }> {
+    const tableName = this.getTableName(componentName)
+
+    const schedules: { [entityId: string]: number | undefined | null } = {}
+    const unprocessed: string[] = []
+
+    const ids = [...entityIds]
+    const responses: Promise<BatchGetCommandOutput>[] = []
+    while (ids.length) {
+      const batch = ids.splice(0, this.batchSize)
+      responses.push(
+        this.client.batchGet({
+          ReturnConsumedCapacity: this.returnConsumedCapacity,
+          RequestItems: {
+            [tableName]: {
+              Keys: batch.map((v) => ({ entityId: v })),
+            },
+          },
+        }),
+      )
+    }
+
+    const results = await Promise.all(responses)
+    for (const result of results) {
+      for (const row of result.Responses?.[tableName] ?? []) {
+        schedules[row.entityId] = row.schedule ?? null
+      }
+      for (const key of result.UnprocessedKeys?.[tableName]?.Keys ?? []) {
+        unprocessed.push(key.entityId.S)
+      }
+    }
+
+    return {
+      schedules,
+      unprocessed,
+    }
+  }
+
+  async batchWriteSchedules(componentName: string, writes: BatchWrite<Date>[]) {
+    const tableName = this.getTableName(componentName)
+
+    const lastModifiedByEntityId: { [entityId: string]: number } = {}
+    const unprocessed: string[] = []
+
+    const responses: Promise<BatchWriteCommandOutput>[] = []
+    const ops = [...writes]
+    while (ops.length) {
+      const batch = ops.splice(0, this.batchSize)
+
+      const requests = []
+      for (const { entityId, component } of batch) {
+        const schedule = component.valueOf()
+        const scheduleDate = this.getDateString(schedule)
+        const lastModified = this.time.now
+        const lastModifiedDate = this.getDateString(lastModified)
+        lastModifiedByEntityId[entityId] = lastModified
+        requests.push({
+          PutRequest: {
+            Item: {
+              entityId,
+              schedule,
+              scheduleDate,
+              lastModifiedDate,
+              lastModified,
+            },
+          },
+        })
+      }
+      responses.push(
+        this.client.batchWrite({
+          ReturnConsumedCapacity: this.returnConsumedCapacity,
+          RequestItems: {
+            [tableName]: requests,
+          },
+        }),
+      )
+    }
+
+    const results = await Promise.all(responses)
+    for (const result of results) {
+      for (const item of result.UnprocessedItems?.[tableName] ?? []) {
+        unprocessed.push(item.PutRequest?.Item?.entityId.S)
+      }
+    }
+
+    return { unprocessed, lastModifiedByEntityId }
+  }
+
+  async writeSchedule(componentName: string, entityId: string, date: Date) {
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    const schedule = date.valueOf()
+    const scheduleDate = this.getDateString(schedule)
+    await this.client.put({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Item: {
+        entityId,
+        schedule,
+        scheduleDate,
+        lastModifiedDate,
+        lastModified,
+      },
+    })
+    return lastModified
+  }
+
+  async deleteSchedule(componentName: string, entityId: string) {
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    await this.client.update({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Key: {
+        entityId,
+      },
+      UpdateExpression: `REMOVE #schedule,  #scheduleDate
+        SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate`,
+      ExpressionAttributeNames: {
+        '#schedule': 'schedule',
+        '#scheduleDate': 'scheduleDate',
+      },
+      ExpressionAttributeValues: {
+        ':lastModified': lastModified,
+        ':lastModifiedDate': lastModifiedDate,
+      },
+      ReturnValues: 'NONE',
+    })
+    return lastModified
+  }
+
+  delete(componentName: string, entityId: string) {
+    return this.client.delete({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Key: {
+        entityId,
+      },
+    })
   }
 
   async batchWrite(componentName: string, writes: BatchWrite<unknown>[]) {
@@ -270,6 +456,36 @@ export class DynamoDbStorage {
     return lastModified
   }
 
+  async conditionalWriteSchedule(
+    componentName: string,
+    entityId: string,
+    current: Date,
+    previous: Date | undefined = undefined,
+  ): Promise<number> {
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    const schedule = current.valueOf()
+    const scheduleDate = this.getDateString(schedule)
+    await this.client.put({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: this.getTableName(componentName),
+      Item: {
+        entityId,
+        schedule,
+        scheduleDate,
+        lastModified,
+        lastModifiedDate,
+      },
+      ConditionExpression: previous
+        ? 'schedule = :previousValue'
+        : 'attribute_not_exists(schedule)',
+      ExpressionAttributeValues: previous
+        ? { ':previousValue': previous }
+        : undefined,
+    })
+    return lastModified
+  }
+
   async updates(
     componentName: string,
     lastModified: number,
@@ -298,6 +514,34 @@ export class DynamoDbStorage {
     })
   }
 
+  async schedules(
+    componentName: string,
+    cursor: number,
+    exclusiveStartKey?: Record<string, unknown>,
+  ) {
+    const type = this.components[componentName].type
+    if (type !== 'schedule') {
+      throw new Error(
+        `component ${componentName} does not support next update tracking`,
+      )
+    }
+    const scheduleDate = this.getDateString(cursor)
+    const tableName = this.getTableName(componentName)
+    return await this.client.query({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: tableName,
+      IndexName: `${tableName}_schedule_index`,
+      KeyConditionExpression:
+        `scheduleDate = :scheduleDate and schedule > :schedule`,
+      ExpressionAttributeValues: {
+        ':scheduleDate': scheduleDate,
+        ':schedule': cursor,
+      },
+      ScanIndexForward: true,
+      ExclusiveStartKey: exclusiveStartKey,
+    })
+  }
+
   getDateString(timestamp: number) {
     const date = new Date(timestamp)
     return `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`
@@ -319,7 +563,7 @@ export class DynamoDbStorage {
     return result
   }
 
-  async push(componentName: string, entityId: string, component: unknown) {
+  async arrayPush(componentName: string, entityId: string, component: unknown) {
     const componentType = this.components[componentName].type
     if (componentType !== 'array') {
       throw new Error(
@@ -350,7 +594,7 @@ export class DynamoDbStorage {
     return lastModified
   }
 
-  async remove(componentName: string, entityId: string, index: number) {
+  async arrayRemove(componentName: string, entityId: string, index: number) {
     const componentType = this.components[componentName].type
     if (componentType !== 'array') {
       throw new Error(
@@ -380,7 +624,7 @@ export class DynamoDbStorage {
     return lastModified
   }
 
-  async add(componentName: string, entityId: string, component: string) {
+  async setAdd(componentName: string, entityId: string, values: string[]) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
@@ -402,7 +646,7 @@ export class DynamoDbStorage {
         '#component': 'component',
       },
       ExpressionAttributeValues: {
-        ':value': new Set([component]),
+        ':value': new Set(values),
         ':lastModified': lastModified,
         ':lastModifiedDate': lastModifiedDate,
       },
@@ -411,10 +655,10 @@ export class DynamoDbStorage {
     return lastModified
   }
 
-  async conditionalAdd(
+  async conditionalSetAdd(
     componentName: string,
     entityId: string,
-    component: string,
+    values: string[],
   ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
@@ -424,6 +668,16 @@ export class DynamoDbStorage {
     }
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
+
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':value': new Set(values),
+      ':lastModified': lastModified,
+      ':lastModifiedDate': lastModifiedDate,
+    }
+    for (let i = 0; i < values.length; i++) {
+      expressionAttributeValues[`:val_${i}`] = values[i]
+    }
+
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
@@ -436,19 +690,16 @@ export class DynamoDbStorage {
       ExpressionAttributeNames: {
         '#component': 'component',
       },
-      ExpressionAttributeValues: {
-        ':val': component,
-        ':value': new Set([component]),
-        ':lastModified': lastModified,
-        ':lastModifiedDate': lastModifiedDate,
-      },
-      ConditionExpression: 'not contains(#component, :val)',
+      ExpressionAttributeValues: expressionAttributeValues,
+      ConditionExpression: values
+        .map((_, i) => `not contains(#component, :val_${i})`)
+        .join(' and '),
       ReturnValues: 'NONE',
     })
     return lastModified
   }
 
-  async delete(componentName: string, entityId: string, component: string) {
+  async setDelete(componentName: string, entityId: string, values: string[]) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
@@ -470,7 +721,7 @@ export class DynamoDbStorage {
         '#component': 'component',
       },
       ExpressionAttributeValues: {
-        ':value': new Set([component]),
+        ':value': new Set(values),
         ':lastModified': lastModified,
         ':lastModifiedDate': lastModifiedDate,
       },
@@ -479,10 +730,10 @@ export class DynamoDbStorage {
     return lastModified
   }
 
-  async conditionalDelete(
+  async conditionalSetDelete(
     componentName: string,
     entityId: string,
-    component: string,
+    values: string[],
   ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
@@ -492,6 +743,16 @@ export class DynamoDbStorage {
     }
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
+
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':value': new Set(values),
+      ':lastModified': lastModified,
+      ':lastModifiedDate': lastModifiedDate,
+    }
+    for (let i = 0; i < values.length; i++) {
+      expressionAttributeValues[`:val_${i}`] = values[i]
+    }
+
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
@@ -504,13 +765,10 @@ export class DynamoDbStorage {
       ExpressionAttributeNames: {
         '#component': 'component',
       },
-      ExpressionAttributeValues: {
-        ':val': component,
-        ':value': new Set([component]),
-        ':lastModified': lastModified,
-        ':lastModifiedDate': lastModifiedDate,
-      },
-      ConditionExpression: 'contains(#component, :val)',
+      ExpressionAttributeValues: expressionAttributeValues,
+      ConditionExpression: values
+        .map((_, i) => `contains(#component, :val_${i})`)
+        .join(' and '),
       ReturnValues: 'NONE',
     })
     return lastModified
@@ -552,6 +810,32 @@ export class DynamoDbStorage {
             WriteCapacityUnits: 5,
           },
         })
+      } else if (type === 'schedule') {
+        if (primaryTable.GlobalSecondaryIndexes === undefined) {
+          primaryTable.GlobalSecondaryIndexes = []
+        }
+        primaryTable.AttributeDefinitions?.push({
+          AttributeName: 'schedule',
+          AttributeType: 'N',
+        })
+        primaryTable.AttributeDefinitions?.push({
+          AttributeName: 'scheduleDate',
+          AttributeType: 'S',
+        })
+        primaryTable.GlobalSecondaryIndexes!.push({
+          IndexName: `${primaryTable.TableName}_schedule_index`,
+          KeySchema: [
+            { AttributeName: 'scheduleDate', KeyType: 'HASH' },
+            { AttributeName: 'schedule', KeyType: 'RANGE' },
+          ],
+          Projection: {
+            ProjectionType: 'KEYS_ONLY',
+          },
+          ProvisionedThroughput: {
+            ReadCapacityUnits: 5,
+            WriteCapacityUnits: 5,
+          },
+        })
       }
 
       if (tracksUpdates) {
@@ -581,7 +865,6 @@ export class DynamoDbStorage {
           },
         })
       }
-
       await this.client.send(new CreateTableCommand(primaryTable))
     }
   }

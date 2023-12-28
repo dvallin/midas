@@ -43,28 +43,36 @@ export default function spec(provider: () => SetStorage<string>) {
   it('adds values', async () => {
     const storage = provider()
     await storage.write('add-value', ['1'])
-    await storage.add('add-value', '2')
-    await storage.add('add-value', '2')
+    await storage.setAdd('add-value', '2')
+    await storage.setAdd('add-value', '2')
     expect(await storage.read('add-value')).toEqual(['1', '2'])
   })
   it('inserts on add', async () => {
     const storage = provider()
-    await storage.add('insert-on-add', '1')
-    await storage.add('insert-on-add', '2')
-    expect(await storage.read('insert-on-add')).toEqual(['1', '2'])
+    await storage.setAdd('insert-on-add', '1')
+    await storage.setAdd('insert-on-add', '2', '3')
+    expect(await storage.read('insert-on-add')).toEqual(['1', '2', '3'])
   })
   describe('conditional add', () => {
     it('adds if value is not already present', async () => {
       const storage = provider()
       await storage.write('add-if-not-present', ['1', '2'])
-      await storage.conditionalAdd('add-if-not-present', '3')
+      await storage.conditionalSetAdd('add-if-not-present', '3')
       expect(await storage.read('add-if-not-present')).toEqual(
         expect.arrayContaining(['1', '2', '3']),
       )
     })
+    it('adds multiple values if not already present', async () => {
+      const storage = provider()
+      await storage.write('add-multiple-if-not-present', ['1', '2'])
+      await storage.conditionalSetAdd('add-multiple-if-not-present', '3', '4')
+      expect(await storage.read('add-multiple-if-not-present')).toEqual(
+        expect.arrayContaining(['1', '2', '3', '4']),
+      )
+    })
     it('inserts if value is not already present', async () => {
       const storage = provider()
-      await storage.conditionalAdd('insert-if-not-present', '3')
+      await storage.conditionalSetAdd('insert-if-not-present', '3')
       expect(await storage.read('insert-if-not-present')).toEqual(
         expect.arrayContaining(['3']),
       )
@@ -73,28 +81,35 @@ export default function spec(provider: () => SetStorage<string>) {
       const storage = provider()
       await storage.write('fail-add-if-present', ['1', '3'])
       expect(
-        storage.conditionalAdd('fail-add-if-present', '3'),
+        storage.conditionalSetAdd('fail-add-if-present', '3'),
+      ).rejects.toThrowError('conditional add failed')
+    })
+    it('fails if one of multiple value already present', async () => {
+      const storage = provider()
+      await storage.write('fail-multiple-add-if-present', ['1', '3'])
+      expect(
+        storage.conditionalSetAdd('fail-multiple-add-if-present', '4', '3'),
       ).rejects.toThrowError('conditional add failed')
     })
   })
   it('deletes values', async () => {
     const storage = provider()
     await storage.write('delete-value', ['1'])
-    await storage.delete('delete-value', '1')
+    await storage.setDelete('delete-value', '1')
     expect(await storage.read('delete-value')).toEqual([])
   })
   describe('conditional delete', () => {
     it('delete if value is already present', async () => {
       const storage = provider()
       await storage.write('delete-if-present', ['1', '2'])
-      await storage.conditionalDelete('delete-if-present', '2')
+      await storage.conditionalSetDelete('delete-if-present', '2')
       expect(await storage.read('delete-if-present')).toEqual(['1'])
     })
     it('fails if value not already present', async () => {
       const storage = provider()
       await storage.write('delete-fail-if-not-present', ['1', '3'])
       expect(
-        storage.conditionalDelete('delete-fail-if-not-present', '2'),
+        storage.conditionalSetDelete('delete-fail-if-not-present', '2'),
       ).rejects.toThrowError('conditional delete failed')
     })
   })

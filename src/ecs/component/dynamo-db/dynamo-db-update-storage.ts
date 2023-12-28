@@ -1,11 +1,16 @@
 import { QueryCommandOutput } from '@aws-sdk/lib-dynamodb'
 import { UpdateStorage } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
+import { ComponentConfig } from '../..'
 
-export class DynamoDbUpdateStorage implements UpdateStorage {
+export class DynamoDbUpdateStorage<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> implements UpdateStorage {
   constructor(
     protected componentName: string,
-    protected storage: DynamoDbStorage,
+    protected storage: DynamoDbStorage<Components>,
   ) {}
 
   async *updates(

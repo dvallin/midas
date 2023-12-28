@@ -9,7 +9,7 @@ import { Time } from '../../service/time'
 export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
   protected readonly storage: Record<
     string,
-    { component: T; lastModified: number }
+    { component: T | null; lastModified: number }
   > = {}
 
   protected readonly time = new Time()
@@ -22,7 +22,7 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
     return Object.keys(this.storage).length
   }
 
-  read(entityId: string): Promise<T | undefined> {
+  read(entityId: string): Promise<T | undefined | null> {
     return Promise.resolve(this.storage[entityId]?.component)
   }
   async readOrThrow(entityId: string): Promise<T> {
@@ -42,13 +42,31 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
   conditionalWrite(
     entityId: string,
     current: T,
-    previous: T | undefined,
+    previous: T | undefined | null,
   ): Promise<{ cursor: string }> {
     const value = this.storage[entityId]
     if (JSON.stringify(value?.component) !== JSON.stringify(previous)) {
       return Promise.reject(new Error('conditional write failed'))
     }
     return this.write(entityId, current)
+  }
+
+  async readBeforeWriteUpdate(
+    entityId: string,
+    updater: (previous: T | null | undefined) => T,
+  ): Promise<{ cursor: string }> {
+    const previous = await this.read(entityId)
+    return this.conditionalWrite(entityId, updater(previous), previous)
+  }
+
+  delete(entityId: string): Promise<{ cursor: string }> {
+    const lastModified = this.time.now
+    this.storage[entityId] = { component: null, lastModified }
+    return Promise.resolve({ cursor: lastModified.toString() })
+  }
+  erase(entityId: string): Promise<void> {
+    delete this.storage[entityId]
+    return Promise.resolve()
   }
 
   batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {

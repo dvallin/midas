@@ -1,13 +1,17 @@
 import { Client } from '@elastic/elasticsearch'
 import { Time, TimeContext } from '../../service/time'
 import { ElasticsearchContext } from '../../../middleware/elasticsearch/elasticsearch-middleware'
-import { EcsBaseContext } from '../..'
+import { ComponentConfig, EcsBaseContext, InferComponents } from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
 import { BatchWrite } from '..'
 
-export type ElasticsearchStorageContext =
+export type ElasticsearchStorageContext<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> =
   & ElasticsearchContext
-  & EcsBaseContext
+  & EcsBaseContext<Components>
   & TimeContext
   & {
     storage: {
@@ -19,10 +23,16 @@ export type ElasticsearchStorageContext =
     }
   }
 export const elasticsearchStorageContextMiddleware = <
-  C extends ElasticsearchContext & EcsBaseContext & TimeContext,
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+  C extends ElasticsearchContext & EcsBaseContext<Components> & TimeContext,
 >(
   alwaysRefresh?: boolean,
-): ContextExtensionMiddleware<C, ElasticsearchStorageContext> => {
+): ContextExtensionMiddleware<
+  C,
+  ElasticsearchStorageContext<InferComponents<C>>
+> => {
   return async (_e, ctx, next) => {
     const c = ctx as { storage?: Record<string, unknown> }
     if (!c.storage) {
@@ -33,20 +43,34 @@ export const elasticsearchStorageContextMiddleware = <
         alwaysRefresh,
       },
     }
-    return await next(ctx as C & ElasticsearchStorageContext)
+    return await next(
+      ctx as C & ElasticsearchStorageContext<InferComponents<C>>,
+    )
   }
 }
 
-export class ElasticsearchStorage {
+export class ElasticsearchStorage<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> {
   protected readonly client: Client
   protected readonly time: Time
   protected readonly alwaysRefresh: boolean
   protected readonly batchSize: number
-  constructor(protected readonly context: ElasticsearchStorageContext) {
+  protected readonly components: EcsBaseContext<Components>['components']
+  constructor(
+    protected readonly context: ElasticsearchStorageContext<Components>,
+  ) {
     this.client = context.elastic.client
     this.time = context.service.time
     this.alwaysRefresh = context.storage.elastic.config.alwaysRefresh ?? false
     this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
+    this.components = context.components
+  }
+
+  supports(componentName: string) {
+    return this.components[componentName].storageConfig.type === 'elastic'
   }
 
   getIndex(componentName: string) {
@@ -121,6 +145,19 @@ export class ElasticsearchStorage {
       })
     }
     return { lastModifiedByEntityId }
+  }
+
+  async delete<T>(
+    componentName: string,
+    entityId: string,
+  ): Promise<{ cursor: string }> {
+    const lastModified = this.time.now
+    await this.client.delete({
+      id: entityId,
+      index: this.getIndex(componentName),
+      refresh: this.alwaysRefresh,
+    })
+    return { cursor: lastModified.toString() }
   }
 
   async conditionalWrite<T>(

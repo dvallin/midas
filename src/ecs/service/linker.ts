@@ -8,15 +8,15 @@ export class Linker {
   ) {}
 
   async link(from: EntityId, to: EntityId): Promise<void> {
-    await this.from.add(from, to)
+    await this.from.setAdd(from, to)
     if (this.to) {
-      await this.to.add(to, from)
+      await this.to.setAdd(to, from)
     }
   }
   async unlink(from: EntityId, to: EntityId): Promise<void> {
-    await this.from.delete(from, to)
+    await this.from.setDelete(from, to)
     if (this.to) {
-      await this.to.delete(to, from)
+      await this.to.setDelete(to, from)
     }
   }
 }

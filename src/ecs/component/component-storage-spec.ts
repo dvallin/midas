@@ -6,20 +6,32 @@ export default function spec(
 ) {
   it('reads and writes', async () => {
     const { storage } = provider()
-    await storage.write('1', 'product-1')
-    expect(await storage.read('1')).toEqual('product-1')
+    await storage.write('reads-and-writes', 'product-1')
+    expect(await storage.read('reads-and-writes')).toEqual('product-1')
+  })
+  it('deletes', async () => {
+    const { storage } = provider()
+    await storage.write('delete', 'product-1')
+    await storage.delete('delete')
+    expect(await storage.read('delete')).toBeNull()
+  })
+  it('erases', async () => {
+    const { storage } = provider()
+    await storage.write('delete', 'product-1')
+    await storage.erase('delete')
+    expect(await storage.read('delete')).toBeUndefined()
   })
   it('batch reads and writes', async () => {
     const { storage } = provider()
     const writes = []
     for (let i = 0; i < 100; i++) {
-      writes.push({ entityId: i.toString(), component: `product-${i}` })
+      writes.push({ entityId: `batch-${i}`, component: `product-${i}` })
     }
     await storage.batchWrite(writes)
 
     const read = await storage.batchRead(writes.map((w) => w.entityId))
     for (let i = 0; i < 100; i++) {
-      expect(read[i].value).toEqual(`product-${i}`)
+      expect(read[`batch-${i}`].value).toEqual(`product-${i}`)
     }
   })
   it('collects all updates', async () => {

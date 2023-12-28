@@ -6,18 +6,28 @@ import {
   ComponentStorage,
 } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
+import { ComponentConfig } from '../..'
 
-export abstract class AbstractDynamoDbComponentStorage<T, E>
-  implements ComponentStorage<T> {
+export abstract class AbstractDynamoDbComponentStorage<
+  T,
+  E,
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> implements ComponentStorage<T> {
   constructor(
     protected componentName: string,
-    protected storage: DynamoDbStorage,
-  ) {}
+    protected storage: DynamoDbStorage<Components>,
+  ) {
+    if (!storage.supports(componentName)) {
+      throw new Error(`${componentName} does not support dynamo db`)
+    }
+  }
 
-  abstract encode(value: T): E
-  abstract decode(value: E | null): T
+  abstract encode(value: T | null): E | null
+  abstract decode(value: E | null): T | null
 
-  async read(entityId: string): Promise<T | undefined> {
+  async read(entityId: string): Promise<T | undefined | null> {
     const result = await this.storage.read<E>(this.componentName, entityId)
     if (result === undefined) {
       return undefined
@@ -47,7 +57,7 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
   async conditionalWrite(
     entityId: string,
     current: T,
-    previous: T | undefined,
+    previous: T | undefined | null,
   ): Promise<{ cursor: string }> {
     try {
       const lastModified = await this.storage.conditionalWrite(
@@ -66,6 +76,26 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
     }
   }
 
+  async readBeforeWriteUpdate(
+    entityId: string,
+    updater: (previous: T | null | undefined) => T,
+  ): Promise<{ cursor: string }> {
+    const previous = await this.read(entityId)
+    return this.conditionalWrite(entityId, updater(previous), previous)
+  }
+
+  async delete(entityId: string): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.write(
+      this.componentName,
+      entityId,
+      null,
+    )
+    return { cursor: lastModified.toString() }
+  }
+  async erase(entityId: string): Promise<void> {
+    await this.storage.delete(this.componentName, entityId)
+  }
+
   async batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {
     const result: BatchReadResult<T> = {}
     const batchReadResult = await this.storage.batchRead<E>(
@@ -74,7 +104,9 @@ export abstract class AbstractDynamoDbComponentStorage<T, E>
     )
     for (const id of entityIds) {
       const value = batchReadResult.components[id]
-      result[id] = { value: value ? this.decode(value) : undefined }
+      result[id] = {
+        value: value !== undefined ? this.decode(value) : undefined,
+      }
     }
     for (const id of batchReadResult.unprocessed) {
       result[id] = { error: new Error('not processed') }

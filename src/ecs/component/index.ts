@@ -2,7 +2,7 @@ import { EntityId } from '../entity'
 
 export type BatchReadResult<T> = {
   [entityId: string]: {
-    value?: T
+    value?: T | null
     error?: Error
   }
 }
@@ -14,15 +14,23 @@ export type BatchWriteResult = {
   }
 }
 export interface ComponentStorage<T> {
-  read(entityId: EntityId): Promise<T | undefined>
+  read(entityId: EntityId): Promise<T | undefined | null>
   readOrThrow(entityId: EntityId): Promise<T>
 
   write(entityId: string, component: T): Promise<{ cursor: string }>
   conditionalWrite(
     entityId: EntityId,
     current: T,
-    previous: T | undefined,
+    previous: T | undefined | null,
   ): Promise<{ cursor: string }>
+
+  readBeforeWriteUpdate(
+    entityId: EntityId,
+    updater: (previous: T | undefined | null) => T,
+  ): Promise<{ cursor: string }>
+
+  delete(entityId: string): Promise<{ cursor: string }>
+  erase(entityId: string): Promise<void>
 
   batchRead(entityIds: EntityId[]): Promise<BatchReadResult<T>>
   batchWrite(writes: BatchWrite<T>[]): Promise<BatchWriteResult>
@@ -36,16 +44,25 @@ export interface UpdateStorage {
   ): AsyncGenerator<{ entityId: EntityId; cursor: string }>
 }
 
+export interface ScheduleStorage extends UpdateStorage, ComponentStorage<Date> {
+  schedules(
+    startDate?: Date,
+  ): AsyncGenerator<{ entityId: EntityId; cursor: string }>
+}
+
 export interface ArrayStorage<T> extends ComponentStorage<T[]> {
-  push(entityId: EntityId, component: T): Promise<{ cursor: string }>
-  remove(entityId: string, index: number): Promise<{ cursor: string }>
+  arrayPush(entityId: EntityId, component: T): Promise<{ cursor: string }>
+  arrayRemove(entityId: string, index: number): Promise<{ cursor: string }>
 }
 
 export interface SetStorage<T> extends ComponentStorage<T[]> {
-  add(entityId: EntityId, component: T): Promise<{ cursor: string }>
-  conditionalAdd(entityId: EntityId, component: T): Promise<{ cursor: string }>
-  delete(entityId: EntityId, component: T): Promise<{ cursor: string }>
-  conditionalDelete(
+  setAdd(entityId: EntityId, ...component: T[]): Promise<{ cursor: string }>
+  conditionalSetAdd(
+    entityId: EntityId,
+    ...component: T[]
+  ): Promise<{ cursor: string }>
+  setDelete(entityId: EntityId, ...component: T[]): Promise<{ cursor: string }>
+  conditionalSetDelete(
     entityId: EntityId,
     component: T,
   ): Promise<{ cursor: string }>

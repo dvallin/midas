@@ -96,7 +96,7 @@ export default function (
 }
 
 function onSkuChange(
-  product: Product | undefined,
+  product: Product | undefined | null,
   variant: Variant,
   skuId: string,
   sku: Sku,

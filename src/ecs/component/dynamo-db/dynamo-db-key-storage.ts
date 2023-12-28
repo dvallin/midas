@@ -1,11 +1,15 @@
 import { KeyStorage } from '..'
+import { ComponentConfig } from '../..'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 
-export class DynamoDbKeyStorage
-  extends AbstractDynamoDbComponentStorage<string, string>
+export class DynamoDbKeyStorage<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> extends AbstractDynamoDbComponentStorage<string, string, Components>
   implements KeyStorage {
-  constructor(componentName: string, storage: DynamoDbStorage) {
+  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
     super(componentName, storage)
   }
 

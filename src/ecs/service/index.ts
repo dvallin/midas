@@ -1,5 +1,6 @@
 export * from './batcher'
 export * from './importer'
+export * from './updater'
 export * from './linker'
 export * from './queries'
 export * from './time'

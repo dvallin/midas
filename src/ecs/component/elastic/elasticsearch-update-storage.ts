@@ -1,27 +1,40 @@
 import { UpdateStorage } from '..'
+import { ComponentConfig } from '../..'
 import { ElasticsearchStorage } from './elasticsearch-storage'
 
-export class ElasticsearchUpdateStorage implements UpdateStorage {
+export class ElasticsearchUpdateStorage<
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> implements UpdateStorage {
   constructor(
     protected readonly componentName: string,
-    protected readonly storage: ElasticsearchStorage,
+    protected readonly storage: ElasticsearchStorage<Components>,
   ) {}
 
   async *updates(
     cursor?: string,
   ): AsyncGenerator<{ entityId: string; cursor: string }> {
-    const result = await this.storage.updates(
-      this.componentName,
-      parseFloat(cursor ?? '0'),
-    )
+    let currentCursor = parseFloat(cursor ?? '0')
+    while (true) {
+      const result = await this.storage.updates(
+        this.componentName,
+        currentCursor,
+      )
 
-    for (const hit of result.hits.hits) {
-      const entityId = hit._id
-      const lastModified = hit._source?.lastModified
-      if (!lastModified) {
-        throw new Error('last modified missing')
+      if (result.hits.hits.length === 0) {
+        return
       }
-      yield { entityId, cursor: lastModified.toString() }
+
+      for (const hit of result.hits.hits) {
+        const entityId = hit._id
+        const lastModified = hit._source?.lastModified
+        if (!lastModified) {
+          throw new Error('last modified missing')
+        }
+        currentCursor = lastModified
+        yield { entityId, cursor: currentCursor.toString() }
+      }
     }
   }
 }

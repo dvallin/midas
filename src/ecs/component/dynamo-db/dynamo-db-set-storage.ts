@@ -4,19 +4,24 @@ import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing } from './schema-parse'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
+import { ComponentConfig } from '../..'
 
-export class DynamoDbSetStorage<T>
-  extends AbstractDynamoDbComponentStorage<T[], Set<string>>
+export class DynamoDbSetStorage<
+  T,
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> extends AbstractDynamoDbComponentStorage<T[], Set<string>, Components>
   implements SetStorage<T> {
-  constructor(componentName: string, storage: DynamoDbStorage) {
+  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
     super(componentName, storage)
   }
 
-  encode(value: T[]): Set<string> {
-    return new Set(value.map((v) => JSON.stringify(v)))
+  encode(value: T[] | null): Set<string> | null {
+    return value && new Set(value.map((v) => JSON.stringify(v)))
   }
 
-  decode(value: Set<string> | null): T[] {
+  decode(value: Set<string> | null): T[] | null {
     const schema = this.storage.getSchema(this.componentName)
     if (schema === undefined) {
       const result: T[] = []
@@ -33,24 +38,24 @@ export class DynamoDbSetStorage<T>
     return result
   }
 
-  async add(entityId: string, component: T): Promise<{ cursor: string }> {
-    const lastModified = await this.storage.add(
+  async setAdd(entityId: string, ...values: T[]): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.setAdd(
       this.componentName,
       entityId,
-      JSON.stringify(component),
+      values.map((v) => JSON.stringify(v)),
     )
     return { cursor: lastModified.toString() }
   }
 
-  async conditionalAdd(
+  async conditionalSetAdd(
     entityId: string,
-    component: T,
+    ...values: T[]
   ): Promise<{ cursor: string }> {
     try {
-      const lastModified = await this.storage.conditionalAdd(
+      const lastModified = await this.storage.conditionalSetAdd(
         this.componentName,
         entityId,
-        JSON.stringify(component),
+        values.map((v) => JSON.stringify(v)),
       )
       return { cursor: lastModified.toString() }
     } catch (e) {
@@ -62,24 +67,27 @@ export class DynamoDbSetStorage<T>
     }
   }
 
-  async delete(entityId: string, component: T): Promise<{ cursor: string }> {
-    const lastModified = await this.storage.delete(
+  async setDelete(
+    entityId: string,
+    ...values: T[]
+  ): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.setDelete(
       this.componentName,
       entityId,
-      JSON.stringify(component),
+      values.map((v) => JSON.stringify(v)),
     )
     return { cursor: lastModified.toString() }
   }
 
-  async conditionalDelete(
+  async conditionalSetDelete(
     entityId: string,
-    component: T,
+    ...values: T[]
   ): Promise<{ cursor: string }> {
     try {
-      const lastModified = await this.storage.conditionalDelete(
+      const lastModified = await this.storage.conditionalSetDelete(
         this.componentName,
         entityId,
-        JSON.stringify(component),
+        values.map((v) => JSON.stringify(v)),
       )
       return { cursor: lastModified.toString() }
     } catch (e) {

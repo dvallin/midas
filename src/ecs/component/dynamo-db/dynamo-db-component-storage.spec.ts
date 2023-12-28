@@ -10,24 +10,41 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createTestDynamoDbStorage } from './create-test-dynamo-db-storage'
 import { string } from '@spaceteams/zap'
 import { MockTime } from '../../service/time'
+import { componentConfig, componentStorageConfig } from '../..'
 
 const { storage, context } = await createTestDynamoDbStorage(
   'dynamo-db-component-storage',
   {
-    componentStorageTest: {
-      type: 'default',
+    componentStorageTest: componentConfig({
       tracksUpdates: true,
       schema: string(),
-    },
-    componentStorageSpec: {
-      type: 'default',
+      storageConfig: componentStorageConfig({ type: 'dynamo' }),
+    }),
+    componentStorageSpec: componentConfig({
       tracksUpdates: true,
       schema: string(),
-    },
-    skus: { type: 'default', tracksUpdates: true, schema: SkuSchema },
-    variants: { type: 'default', tracksUpdates: true, schema: VariantSchema },
-    products: { type: 'default', tracksUpdates: false, schema: ProductSchema },
-    cursors: { type: 'default', tracksUpdates: false, schema: string() },
+      storageConfig: componentStorageConfig({ type: 'dynamo' }),
+    }),
+    skus: componentConfig({
+      tracksUpdates: true,
+      schema: SkuSchema,
+      storageConfig: componentStorageConfig({ type: 'dynamo' }),
+    }),
+    variants: componentConfig({
+      tracksUpdates: true,
+      schema: VariantSchema,
+      storageConfig: componentStorageConfig({ type: 'dynamo' }),
+    }),
+    products: componentConfig({
+      tracksUpdates: true,
+      schema: ProductSchema,
+      storageConfig: componentStorageConfig({ type: 'dynamo' }),
+    }),
+    cursors: componentConfig({
+      tracksUpdates: true,
+      schema: string(),
+      storageConfig: componentStorageConfig({ type: 'dynamo' }),
+    }),
   },
 )
 

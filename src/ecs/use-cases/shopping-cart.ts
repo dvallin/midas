@@ -39,13 +39,9 @@ export default function (
     it('uses read-before write', async () => {
       const { carts } = provider()
 
-      carts.write('1', { items: [] })
-
-      const cart = await carts.readOrThrow('1')
-      const updatedCart: Cart = {
-        items: [...cart.items, { productId: 'product1', quantity: 1 }],
-      }
-      await carts.conditionalWrite('1', updatedCart, cart)
+      await carts.readBeforeWriteUpdate('1', (cart) => ({
+        items: [...(cart?.items ?? []), { productId: 'product1', quantity: 1 }],
+      }))
     })
   })
   describe('event-sourced shopping cart usecase', () => {
@@ -54,15 +50,15 @@ export default function (
 
       await carts.write('1', { items: [] })
 
-      await cartEvents.push('1', {
+      await cartEvents.arrayPush('1', {
         op: 'add',
         item: { productId: 'product1', quantity: 1 },
       })
-      await cartEvents.push('1', {
+      await cartEvents.arrayPush('1', {
         op: 'add',
         item: { productId: 'product2', quantity: 1 },
       })
-      await cartEvents.push('1', {
+      await cartEvents.arrayPush('1', {
         op: 'remove',
         index: 0,
       })

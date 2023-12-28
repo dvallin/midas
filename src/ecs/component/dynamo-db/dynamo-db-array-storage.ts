@@ -3,11 +3,16 @@ import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing } from './schema-parse'
+import { ComponentConfig } from '../..'
 
-export class DynamoDbArrayStorage<T>
-  extends AbstractDynamoDbComponentStorage<T[], string[]>
+export class DynamoDbArrayStorage<
+  T,
+  Components extends {
+    [componentName: string]: ComponentConfig
+  },
+> extends AbstractDynamoDbComponentStorage<T[], string[], Components>
   implements ArrayStorage<T> {
-  constructor(componentName: string, storage: DynamoDbStorage) {
+  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
     super(componentName, storage)
   }
 
@@ -24,8 +29,8 @@ export class DynamoDbArrayStorage<T>
     return (value ?? []).map((v) => parseThrowing(parser, v))
   }
 
-  async push(entityId: string, component: T): Promise<{ cursor: string }> {
-    const lastModified = await this.storage.push(
+  async arrayPush(entityId: string, component: T): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.arrayPush(
       this.componentName,
       entityId,
       JSON.stringify(component),
@@ -33,8 +38,11 @@ export class DynamoDbArrayStorage<T>
     return { cursor: lastModified.toString() }
   }
 
-  async remove(entityId: string, index: number): Promise<{ cursor: string }> {
-    const lastModified = await this.storage.remove(
+  async arrayRemove(
+    entityId: string,
+    index: number,
+  ): Promise<{ cursor: string }> {
+    const lastModified = await this.storage.arrayRemove(
       this.componentName,
       entityId,
       index,

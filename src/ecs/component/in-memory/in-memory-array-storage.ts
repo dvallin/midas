@@ -3,14 +3,17 @@ import { ArrayStorage } from '..'
 
 export class InMemoryArrayStorage<T> extends InMemoryComponentStorage<T[]>
   implements ArrayStorage<T> {
-  async push(entityId: string, component: T): Promise<{ cursor: string }> {
+  async arrayPush(entityId: string, component: T): Promise<{ cursor: string }> {
     const value = await this.read(entityId)
     const current = value ?? []
     current.push(component)
     return this.conditionalWrite(entityId, Array.from(current), value)
   }
 
-  async remove(entityId: string, index: number): Promise<{ cursor: string }> {
+  async arrayRemove(
+    entityId: string,
+    index: number,
+  ): Promise<{ cursor: string }> {
     const value = await this.read(entityId)
     const current = value ?? []
     current.splice(index, 1)

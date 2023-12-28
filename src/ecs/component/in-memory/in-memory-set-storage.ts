@@ -3,43 +3,57 @@ import { SetStorage } from '..'
 
 export class InMemorySetStorage<T> extends InMemoryComponentStorage<T[]>
   implements SetStorage<T> {
-  async add(entityId: string, component: T): Promise<{ cursor: string }> {
-    const value = await this.read(entityId)
-    const current = new Set(value ?? [])
-    current.add(component)
-    return this.conditionalWrite(entityId, Array.from(current), value)
-  }
-
-  async conditionalAdd(
+  async setAdd(
     entityId: string,
-    component: T,
+    ...components: T[]
   ): Promise<{ cursor: string }> {
     const value = await this.read(entityId)
     const current = new Set(value ?? [])
-    if (current.has(component)) {
+    for (const c of components) {
+      current.add(c)
+    }
+    return this.conditionalWrite(entityId, Array.from(current), value)
+  }
+
+  async conditionalSetAdd(
+    entityId: string,
+    ...components: T[]
+  ): Promise<{ cursor: string }> {
+    const value = await this.read(entityId)
+    const current = new Set(value ?? [])
+    if (components.some((c) => current.has(c))) {
       return Promise.reject(new Error('conditional add failed'))
     }
-    current.add(component)
+    for (const c of components) {
+      current.add(c)
+    }
     return this.conditionalWrite(entityId, Array.from(current), value)
   }
 
-  async delete(entityId: string, component: T): Promise<{ cursor: string }> {
-    const value = await this.read(entityId)
-    const current = new Set(value ?? [])
-    current.delete(component)
-    return this.conditionalWrite(entityId, Array.from(current), value)
-  }
-
-  async conditionalDelete(
+  async setDelete(
     entityId: string,
-    component: T,
+    ...components: T[]
   ): Promise<{ cursor: string }> {
     const value = await this.read(entityId)
     const current = new Set(value ?? [])
-    if (!current.has(component)) {
+    for (const c of components) {
+      current.delete(c)
+    }
+    return this.conditionalWrite(entityId, Array.from(current), value)
+  }
+
+  async conditionalSetDelete(
+    entityId: string,
+    ...components: T[]
+  ): Promise<{ cursor: string }> {
+    const value = await this.read(entityId)
+    const current = new Set(value ?? [])
+    if (components.some((c) => !current.has(c))) {
       return Promise.reject(new Error('conditional delete failed'))
     }
-    current.delete(component)
+    for (const c of components) {
+      current.delete(c)
+    }
     return this.conditionalWrite(entityId, Array.from(current), value)
   }
 }
