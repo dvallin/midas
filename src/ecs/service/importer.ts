@@ -56,6 +56,7 @@ export class Importer<T> {
         .map((a) => a.cursor)
         .reduce((a, b) => (a < b ? b : a))
       if (!nextCursor || nextCursor < cursor) {
+        console.log(nextCursor, cursor)
         nextCursor = cursor
       }
     }

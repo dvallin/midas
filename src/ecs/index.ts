@@ -5,7 +5,12 @@ export * as entity from './entity'
 export * as service from './service'
 export * as component from './component'
 
-export type StorageConfig = { batchSize?: number }
+export type ValidationMode = 'read' | 'write' | 'readWrite'
+
+export type StorageConfig = {
+  batchSize?: number
+  validationMode?: ValidationMode
+}
 
 export type ComponentStorageConfig =
   | {
@@ -17,24 +22,26 @@ export type ComponentConfig = {
   type: 'key' | 'set' | 'array' | 'default' | 'schedule'
   tracksUpdates: boolean
   schema?: Schema<unknown>
-  storageConfig: ComponentStorageConfig
+  storageConfig: StorageConfig & ComponentStorageConfig
 }
-const defaultStorageConfig: ComponentStorageConfig = { type: 'memory' }
+const defaultComponentStorageConfig: StorageConfig & ComponentStorageConfig = {
+  type: 'memory',
+}
 export function componentStorageConfig(
   config: Partial<ComponentStorageConfig>,
 ): ComponentStorageConfig {
-  return { ...defaultStorageConfig, ...config }
+  return { ...defaultComponentStorageConfig, ...config }
 }
 
-const defaultConfig: ComponentConfig = {
+const defaultComponentConfig: ComponentConfig = {
   type: 'default',
   tracksUpdates: false,
-  storageConfig: { type: 'memory' },
+  storageConfig: defaultComponentStorageConfig,
 }
 export function componentConfig(
   config: Partial<ComponentConfig>,
 ): ComponentConfig {
-  return { ...defaultConfig, ...config }
+  return { ...defaultComponentConfig, ...config }
 }
 
 export type EcsBaseContext<

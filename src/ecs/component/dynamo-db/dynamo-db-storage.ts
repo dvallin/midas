@@ -14,9 +14,15 @@ import {
   ReturnConsumedCapacity,
 } from '@aws-sdk/client-dynamodb'
 import { Time, TimeContext } from '../../service/time'
-import { ComponentConfig, EcsBaseContext, InferComponents } from '../..'
+import {
+  ComponentConfig,
+  EcsBaseContext,
+  InferComponents,
+  ValidationMode,
+} from '../..'
 import { addDays, differenceInDays, startOfDay } from 'date-fns'
 import { BatchWrite } from '..'
+import { validateThrowing } from './schema-parse'
 
 export type DynamoDbStorageContext<
   Components extends {
@@ -73,6 +79,7 @@ export class DynamoDbStorage<
   protected readonly clusterId: string
   protected readonly time: Time
   protected readonly batchSize: number
+  protected readonly defaultValidationMode: ValidationMode
   constructor(context: DynamoDbStorageContext<Components>) {
     this.client = context.aws.dynamoDb
     this.clusterId = context.clusterId
@@ -81,6 +88,7 @@ export class DynamoDbStorage<
       context.storage.dynamodb.config.returnConsumedCapacity
     this.time = context.service.time
     this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
+    this.defaultValidationMode = context.storage.validationMode ?? 'readWrite'
   }
 
   supports(componentName: string) {
@@ -93,6 +101,13 @@ export class DynamoDbStorage<
 
   getSchema(componentName: string) {
     return this.components[componentName].schema
+  }
+
+  validationMode(componentName: string) {
+    return (
+      this.components[componentName].storageConfig.validationMode ??
+        this.defaultValidationMode
+    )
   }
 
   async read<T>(

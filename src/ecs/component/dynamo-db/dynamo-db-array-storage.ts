@@ -2,7 +2,7 @@ import { ArrayStorage } from '..'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
-import { parseThrowing } from './schema-parse'
+import { parseThrowing, validateThrowing } from './schema-parse'
 import { ComponentConfig } from '../..'
 
 export class DynamoDbArrayStorage<
@@ -17,16 +17,28 @@ export class DynamoDbArrayStorage<
   }
 
   encode(value: T[]): string[] {
-    return value.map((v) => JSON.stringify(v))
+    const validationMode = this.storage.validationMode(this.componentName)
+    const schema = this.storage.getSchema(this.componentName)
+    return value
+      .filter(
+        (v) =>
+          validationMode === 'read' ||
+          schema === undefined ||
+          validateThrowing(schema, v),
+      )
+      .map((v) => JSON.stringify(v))
   }
 
   decode(value: string[] | null): T[] {
-    const schema = this.storage.getSchema(this.componentName)
-    if (schema === undefined) {
-      return (value ?? []).map((v) => JSON.parse(v))
+    const validationMode = this.storage.validationMode(this.componentName)
+    if (validationMode === 'read' || validationMode === 'readWrite') {
+      const schema = this.storage.getSchema(this.componentName)
+      if (schema !== undefined) {
+        const parser = json(schema as Schema<T>)
+        return (value ?? []).map((v) => parseThrowing(parser, v))
+      }
     }
-    const parser = json(schema as Schema<T>)
-    return (value ?? []).map((v) => parseThrowing(parser, v))
+    return (value ?? []).map((v) => JSON.parse(v))
   }
 
   async arrayPush(entityId: string, component: T): Promise<{ cursor: string }> {

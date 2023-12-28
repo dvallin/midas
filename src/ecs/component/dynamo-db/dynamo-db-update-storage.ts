@@ -52,7 +52,7 @@ export class DynamoDbUpdateStorage<
     for (const item of result.Items ?? []) {
       yield {
         entityId: item.entityId,
-        cursor: item.lastModified,
+        cursor: item.lastModified.toString(),
       }
     }
   }

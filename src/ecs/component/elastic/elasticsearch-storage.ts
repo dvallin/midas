@@ -1,7 +1,12 @@
 import { Client } from '@elastic/elasticsearch'
 import { Time, TimeContext } from '../../service/time'
 import { ElasticsearchContext } from '../../../middleware/elasticsearch/elasticsearch-middleware'
-import { ComponentConfig, EcsBaseContext, InferComponents } from '../..'
+import {
+  ComponentConfig,
+  EcsBaseContext,
+  InferComponents,
+  ValidationMode,
+} from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
 import { BatchWrite } from '..'
 
@@ -59,6 +64,7 @@ export class ElasticsearchStorage<
   protected readonly alwaysRefresh: boolean
   protected readonly batchSize: number
   protected readonly components: EcsBaseContext<Components>['components']
+  protected readonly defaultValidationMode: ValidationMode
   constructor(
     protected readonly context: ElasticsearchStorageContext<Components>,
   ) {
@@ -67,10 +73,18 @@ export class ElasticsearchStorage<
     this.alwaysRefresh = context.storage.elastic.config.alwaysRefresh ?? false
     this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
     this.components = context.components
+    this.defaultValidationMode = context.storage.validationMode ?? 'readWrite'
   }
 
   supports(componentName: string) {
     return this.components[componentName].storageConfig.type === 'elastic'
+  }
+
+  validationMode(componentName: string) {
+    return (
+      this.components[componentName].storageConfig.validationMode ??
+        this.defaultValidationMode
+    )
   }
 
   getIndex(componentName: string) {

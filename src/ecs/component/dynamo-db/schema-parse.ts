@@ -7,3 +7,14 @@ export function parseThrowing<T>(schema: Schema<T>, value: unknown): T {
   }
   throw validation
 }
+
+export function validateThrowing<T>(
+  schema: Schema<T>,
+  value: unknown,
+): value is T {
+  const validation = schema.validate(value)
+  if (isSuccess(validation)) {
+    return true
+  }
+  throw validation
+}

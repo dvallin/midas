@@ -1,7 +1,7 @@
 import { SetStorage } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
-import { parseThrowing } from './schema-parse'
+import { parseThrowing, validateThrowing } from './schema-parse'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { ComponentConfig } from '../..'
@@ -18,22 +18,39 @@ export class DynamoDbSetStorage<
   }
 
   encode(value: T[] | null): Set<string> | null {
-    return value && new Set(value.map((v) => JSON.stringify(v)))
+    const validationMode = this.storage.validationMode(this.componentName)
+    const schema = this.storage.getSchema(this.componentName)
+    return (
+      value &&
+      new Set(
+        value
+          .filter(
+            (v) =>
+              validationMode === 'read' ||
+              schema === undefined ||
+              validateThrowing(schema, v),
+          )
+          .map((v) => JSON.stringify(v)),
+      )
+    )
   }
 
   decode(value: Set<string> | null): T[] | null {
-    const schema = this.storage.getSchema(this.componentName)
-    if (schema === undefined) {
-      const result: T[] = []
-      for (const v of value ?? []) {
-        result.push(JSON.parse(v))
+    const validationMode = this.storage.validationMode(this.componentName)
+    if (validationMode === 'read' || validationMode === 'readWrite') {
+      const schema = this.storage.getSchema(this.componentName)
+      if (schema !== undefined) {
+        const parser = json(schema as Schema<T>)
+        const result: T[] = []
+        for (const v of value ?? []) {
+          result.push(parseThrowing(parser, v))
+        }
+        return result
       }
-      return result
     }
-    const parser = json(schema as Schema<T>)
     const result: T[] = []
     for (const v of value ?? []) {
-      result.push(parseThrowing(parser, v))
+      result.push(JSON.parse(v))
     }
     return result
   }
