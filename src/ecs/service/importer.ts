@@ -37,11 +37,9 @@ export class Importer<T> {
     const startCursor = await this.cursors.read(this.importName)
 
     let nextCursor = startCursor
-    for await (
-      const batch of this.batcher.batch(
-        this.updateStorage.updates(startCursor ?? undefined),
-      )
-    ) {
+    for await (const batch of this.batcher.batch(
+      this.updateStorage.updates(startCursor ?? undefined),
+    )) {
       if (batch.length === 0) {
         continue
       }
@@ -56,7 +54,6 @@ export class Importer<T> {
         .map((a) => a.cursor)
         .reduce((a, b) => (a < b ? b : a))
       if (!nextCursor || nextCursor < cursor) {
-        console.log(nextCursor, cursor)
         nextCursor = cursor
       }
     }

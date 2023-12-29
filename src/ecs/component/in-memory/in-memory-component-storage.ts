@@ -54,9 +54,14 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
   async readBeforeWriteUpdate(
     entityId: string,
     updater: (previous: T | null | undefined) => T,
-  ): Promise<{ cursor: string }> {
+  ): Promise<{ cursor: string; component: T }> {
     const previous = await this.read(entityId)
-    return this.conditionalWrite(entityId, updater(previous), previous)
+    const component = updater(previous)
+    const result = await this.conditionalWrite(entityId, component, previous)
+    return {
+      ...result,
+      component,
+    }
   }
 
   delete(entityId: string): Promise<{ cursor: string }> {

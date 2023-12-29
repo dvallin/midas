@@ -30,10 +30,13 @@ async function reserveSeats(
 ) {
   await context.reservedSeatOverview.conditionalSetAdd(planId, ...seatIds)
   try {
-    await context.baskets.readBeforeWriteUpdate(user, (basket) => ({
-      planId,
-      seats: [...seatIds, ...(basket?.seats ?? [])],
-    }))
+    await new component.ReadBeforeWriteUpdate(context.baskets).update(
+      user,
+      (basket) => ({
+        planId,
+        seats: [...seatIds, ...(basket?.seats ?? [])],
+      }),
+    )
     await context.basketReleases.write(user, new Date())
   } catch {
     await context.reservedSeatOverview.setDelete(planId, ...seatIds)

@@ -1,6 +1,7 @@
 import {
   BatchReadResult,
   BatchWrite,
+  BatchWriteError,
   BatchWriteResult,
   ComponentStorage,
 } from '..'
@@ -29,7 +30,8 @@ export class ElasticsearchComponentStorage<
   Components extends {
     [componentName: string]: ComponentConfig
   },
-> implements ComponentStorage<T> {
+> implements ComponentStorage<T>
+{
   constructor(
     protected readonly componentName: string,
     protected readonly storage: ElasticsearchStorage<Components>,
@@ -90,14 +92,6 @@ export class ElasticsearchComponentStorage<
     )
   }
 
-  async readBeforeWriteUpdate(
-    entityId: string,
-    updater: (previous: T | null | undefined) => T,
-  ): Promise<{ cursor: string }> {
-    const previous = await this.read(entityId)
-    return this.conditionalWrite(entityId, updater(previous), previous)
-  }
-
   async batchRead(entityIds: string[]): Promise<BatchReadResult<T>> {
     const result: BatchReadResult<T> = {}
     const batchReadResult = await this.storage.batchRead<T>(
@@ -107,7 +101,7 @@ export class ElasticsearchComponentStorage<
     for (const doc of batchReadResult.docs) {
       if ('error' in doc) {
         result[doc._id] = {
-          error: new Error(doc.error.reason, { cause: doc.error }),
+          error: new BatchWriteError(doc.error.reason ?? '', doc.error),
         }
       } else {
         result[doc._id] = {

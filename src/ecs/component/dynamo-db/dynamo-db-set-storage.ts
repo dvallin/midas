@@ -1,4 +1,4 @@
-import { SetStorage } from '..'
+import { ConditionalWriteError, SetStorage } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing, validateThrowing } from './schema-parse'
@@ -7,12 +7,14 @@ import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { ComponentConfig } from '../..'
 
 export class DynamoDbSetStorage<
-  T,
-  Components extends {
-    [componentName: string]: ComponentConfig
-  },
-> extends AbstractDynamoDbComponentStorage<T[], Set<string>, Components>
-  implements SetStorage<T> {
+    T,
+    Components extends {
+      [componentName: string]: ComponentConfig
+    },
+  >
+  extends AbstractDynamoDbComponentStorage<T[], Set<string>, Components>
+  implements SetStorage<T>
+{
   constructor(componentName: string, storage: DynamoDbStorage<Components>) {
     super(componentName, storage)
   }
@@ -77,7 +79,7 @@ export class DynamoDbSetStorage<
       return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
-        throw new Error('conditional add failed', e)
+        throw new ConditionalWriteError('conditional add failed', e)
       } else {
         throw e
       }
@@ -109,7 +111,7 @@ export class DynamoDbSetStorage<
       return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
-        throw new Error('conditional delete failed', e)
+        throw new ConditionalWriteError('conditional delete failed', e)
       } else {
         throw e
       }

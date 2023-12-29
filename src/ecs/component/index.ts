@@ -13,6 +13,16 @@ export type BatchWriteResult = {
     error?: Error
   }
 }
+export class BatchWriteError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message)
+  }
+}
+export class ConditionalWriteError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message)
+  }
+}
 export interface ComponentStorage<T> {
   read(entityId: EntityId): Promise<T | undefined | null>
   readOrThrow(entityId: EntityId): Promise<T>
@@ -24,18 +34,14 @@ export interface ComponentStorage<T> {
     previous: T | undefined | null,
   ): Promise<{ cursor: string }>
 
-  readBeforeWriteUpdate(
-    entityId: EntityId,
-    updater: (previous: T | undefined | null) => T,
-  ): Promise<{ cursor: string }>
-
   delete(entityId: string): Promise<{ cursor: string }>
   erase(entityId: string): Promise<void>
 
   batchRead(entityIds: EntityId[]): Promise<BatchReadResult<T>>
   batchWrite(writes: BatchWrite<T>[]): Promise<BatchWriteResult>
 }
-export type InferComponentType<T> = T extends ComponentStorage<infer I> ? I
+export type InferComponentType<T> = T extends ComponentStorage<infer I>
+  ? I
   : never
 
 export interface UpdateStorage {
@@ -76,3 +82,4 @@ export interface KeyStorage extends ComponentStorage<string> {
 export * from './in-memory'
 export * from './dynamo-db'
 export * from './elastic'
+export * from './read-before-write-update'

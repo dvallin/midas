@@ -4,6 +4,7 @@ import {
   BatchWrite,
   BatchWriteResult,
   ComponentStorage,
+  ConditionalWriteError,
 } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { ComponentConfig } from '../..'
@@ -14,7 +15,8 @@ export abstract class AbstractDynamoDbComponentStorage<
   Components extends {
     [componentName: string]: ComponentConfig
   },
-> implements ComponentStorage<T> {
+> implements ComponentStorage<T>
+{
   constructor(
     protected componentName: string,
     protected storage: DynamoDbStorage<Components>,
@@ -69,7 +71,7 @@ export abstract class AbstractDynamoDbComponentStorage<
       return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
-        throw new Error('conditional write failed', e)
+        throw new ConditionalWriteError('conditional write failed', e)
       } else {
         throw e
       }
@@ -79,9 +81,14 @@ export abstract class AbstractDynamoDbComponentStorage<
   async readBeforeWriteUpdate(
     entityId: string,
     updater: (previous: T | null | undefined) => T,
-  ): Promise<{ cursor: string }> {
+  ): Promise<{ cursor: string; component: T }> {
     const previous = await this.read(entityId)
-    return this.conditionalWrite(entityId, updater(previous), previous)
+    const component = updater(previous)
+    const result = await this.conditionalWrite(entityId, component, previous)
+    return {
+      ...result,
+      component,
+    }
   }
 
   async delete(entityId: string): Promise<{ cursor: string }> {

@@ -8,17 +8,15 @@ import {
   ValidationMode,
 } from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
-import { BatchWrite } from '..'
+import { BatchWrite, ConditionalWriteError } from '..'
 
 export type ElasticsearchStorageContext<
   Components extends {
     [componentName: string]: ComponentConfig
   },
-> =
-  & ElasticsearchContext
-  & EcsBaseContext<Components>
-  & TimeContext
-  & {
+> = ElasticsearchContext &
+  EcsBaseContext<Components> &
+  TimeContext & {
     storage: {
       elastic: {
         config: {
@@ -83,7 +81,7 @@ export class ElasticsearchStorage<
   validationMode(componentName: string) {
     return (
       this.components[componentName].storageConfig.validationMode ??
-        this.defaultValidationMode
+      this.defaultValidationMode
     )
   }
 
@@ -208,7 +206,7 @@ export class ElasticsearchStorage<
         upsert: { component: current, lastModified },
       })
     } catch (e) {
-      throw new Error('conditional write failed', { cause: e })
+      throw new ConditionalWriteError('conditional write failed', e)
     }
     return { cursor: lastModified.toString() }
   }

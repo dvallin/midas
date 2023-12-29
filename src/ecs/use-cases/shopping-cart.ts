@@ -39,7 +39,7 @@ export default function (
     it('uses read-before write', async () => {
       const { carts } = provider()
 
-      await carts.readBeforeWriteUpdate('1', (cart) => ({
+      await new component.ReadBeforeWriteUpdate(carts).update('1', (cart) => ({
         items: [...(cart?.items ?? []), { productId: 'product1', quantity: 1 }],
       }))
     })

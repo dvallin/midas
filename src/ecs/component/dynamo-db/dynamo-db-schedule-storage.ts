@@ -3,6 +3,7 @@ import {
   BatchReadResult,
   BatchWrite,
   BatchWriteResult,
+  ConditionalWriteError,
   ScheduleStorage,
 } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
@@ -13,7 +14,8 @@ export class DynamoDbScheduleStorageStorage<
   Components extends {
     [componentName: string]: ComponentConfig
   },
-> implements ScheduleStorage {
+> implements ScheduleStorage
+{
   constructor(
     protected componentName: string,
     protected storage: DynamoDbStorage<Components>,
@@ -90,7 +92,7 @@ export class DynamoDbScheduleStorageStorage<
       return { cursor: lastModified.toString() }
     } catch (e) {
       if (e instanceof ConditionalCheckFailedException) {
-        throw new Error('conditional write failed', e)
+        throw new ConditionalWriteError('conditional write failed', e)
       } else {
         throw e
       }
