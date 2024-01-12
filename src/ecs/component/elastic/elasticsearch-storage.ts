@@ -8,15 +8,17 @@ import {
   ValidationMode,
 } from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
-import { BatchWrite, ConditionalWriteError } from '..'
+import { BatchWrite, ConditionalWriteError } from '../component-storage'
 
 export type ElasticsearchStorageContext<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
-> = ElasticsearchContext &
-  EcsBaseContext<Components> &
-  TimeContext & {
+> =
+  & ElasticsearchContext
+  & EcsBaseContext<Components>
+  & TimeContext
+  & {
     storage: {
       elastic: {
         config: {
@@ -27,7 +29,7 @@ export type ElasticsearchStorageContext<
   }
 export const elasticsearchStorageContextMiddleware = <
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
   C extends ElasticsearchContext & EcsBaseContext<Components> & TimeContext,
 >(
@@ -54,7 +56,7 @@ export const elasticsearchStorageContextMiddleware = <
 
 export class ElasticsearchStorage<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 > {
   protected readonly client: Client
@@ -71,7 +73,7 @@ export class ElasticsearchStorage<
     this.alwaysRefresh = context.storage.elastic.config.alwaysRefresh ?? false
     this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
     this.components = context.components
-    this.defaultValidationMode = context.storage.validationMode ?? 'readWrite'
+    this.defaultValidationMode = context.storage.validationMode ?? 'all'
   }
 
   supports(componentName: string) {
@@ -81,7 +83,7 @@ export class ElasticsearchStorage<
   validationMode(componentName: string) {
     return (
       this.components[componentName].storageConfig.validationMode ??
-      this.defaultValidationMode
+        this.defaultValidationMode
     )
   }
 

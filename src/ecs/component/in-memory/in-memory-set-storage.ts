@@ -1,5 +1,5 @@
 import { InMemoryComponentStorage } from './in-memory-component-storage'
-import { SetStorage } from '..'
+import { SetStorage } from '../set-storage'
 
 export class InMemorySetStorage<T> extends InMemoryComponentStorage<T[]>
   implements SetStorage<T> {

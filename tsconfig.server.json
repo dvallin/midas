@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "target": "es2016",
-    "lib": ["es2016"],
-    "module": "CommonJS",
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "esnext",
+    "moduleResolution": "Node"
   },
   "extends": "./tsconfig.json",
   "files": [
-    "./server.ts"
+    "./server/index.ts"
   ]
 }

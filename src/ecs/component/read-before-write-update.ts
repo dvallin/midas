@@ -1,4 +1,4 @@
-import { ComponentStorage } from '.'
+import { ComponentStorage } from './component-storage'
 
 export class ReadBeforeWriteUpdate<T> {
   constructor(readonly storage: ComponentStorage<T>) {}

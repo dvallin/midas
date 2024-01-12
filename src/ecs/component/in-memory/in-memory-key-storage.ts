@@ -1,5 +1,5 @@
 import { InMemoryComponentStorage } from './in-memory-component-storage'
-import { KeyStorage } from '..'
+import { KeyStorage } from '../key-storage'
 
 export class InMemoryKeyStorage extends InMemoryComponentStorage<string>
   implements KeyStorage {

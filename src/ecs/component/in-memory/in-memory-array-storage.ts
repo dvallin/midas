@@ -1,5 +1,5 @@
+import { ArrayStorage } from '../array-storage'
 import { InMemoryComponentStorage } from './in-memory-component-storage'
-import { ArrayStorage } from '..'
 
 export class InMemoryArrayStorage<T> extends InMemoryComponentStorage<T[]>
   implements ArrayStorage<T> {

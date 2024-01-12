@@ -4,15 +4,12 @@ import {
   StartedElasticsearchContainer,
 } from '@testcontainers/elasticsearch'
 
-import { start } from './src/frontend/server'
-
 const containerUrl = (container: StartedTestContainer, port: number) =>
   `http://${container.getHost()}:${container.getMappedPort(port)}`
 
 let localStack: StartedTestContainer
 let elasticsearch: StartedElasticsearchContainer
 export async function setup() {
-  start()
   ;[localStack, elasticsearch] = await Promise.all([
     new GenericContainer('localstack/localstack:3.0.0')
       .withExposedPorts(4566)

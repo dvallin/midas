@@ -26,3 +26,9 @@ export type ContextExtensionMiddleware<
 
 export * from './await-middleware'
 export * from './aws'
+export * from './express'
+export * from './memoize-middleware'
+export * from './context-extract-middleware'
+
+export * as mutableContext from './mutable-context'
+export * as immutableContext from './immutable-context'

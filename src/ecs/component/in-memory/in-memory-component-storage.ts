@@ -3,7 +3,7 @@ import {
   BatchWrite,
   BatchWriteResult,
   ComponentStorage,
-} from '..'
+} from '../component-storage'
 import { Time } from '../../service/time'
 
 export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
@@ -49,19 +49,6 @@ export class InMemoryComponentStorage<T> implements ComponentStorage<T> {
       return Promise.reject(new Error('conditional write failed'))
     }
     return this.write(entityId, current)
-  }
-
-  async readBeforeWriteUpdate(
-    entityId: string,
-    updater: (previous: T | null | undefined) => T,
-  ): Promise<{ cursor: string; component: T }> {
-    const previous = await this.read(entityId)
-    const component = updater(previous)
-    const result = await this.conditionalWrite(entityId, component, previous)
-    return {
-      ...result,
-      component,
-    }
   }
 
   delete(entityId: string): Promise<{ cursor: string }> {

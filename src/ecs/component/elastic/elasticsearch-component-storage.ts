@@ -28,10 +28,9 @@ function isResponseError(e: unknown): e is ResponseError {
 export class ElasticsearchComponentStorage<
   T,
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
-> implements ComponentStorage<T>
-{
+> implements ComponentStorage<T> {
   constructor(
     protected readonly componentName: string,
     protected readonly storage: ElasticsearchStorage<Components>,

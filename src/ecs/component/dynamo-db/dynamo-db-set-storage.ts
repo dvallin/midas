@@ -1,63 +1,70 @@
-import { ConditionalWriteError, SetStorage } from '..'
+import { SetStorage } from '../set-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing, validateThrowing } from './schema-parse'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { ComponentConfig } from '../..'
+import { ComponentConfig, ComponentType } from '../..'
+import { ConditionalWriteError } from '../component-storage'
 
 export class DynamoDbSetStorage<
-    T,
-    Components extends {
-      [componentName: string]: ComponentConfig
-    },
-  >
-  extends AbstractDynamoDbComponentStorage<T[], Set<string>, Components>
-  implements SetStorage<T>
-{
-  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
-    super(componentName, storage)
+  Components extends {
+    [componentName: string]: ComponentConfig<unknown>
+  },
+  K extends keyof Components,
+> extends AbstractDynamoDbComponentStorage<
+  ComponentType<Components[K]>[],
+  Set<string>,
+  Components
+> implements SetStorage<ComponentType<Components[K]>> {
+  constructor(
+    componentName: keyof Components,
+    storage: DynamoDbStorage<Components>,
+  ) {
+    super(componentName as string, storage)
   }
 
-  encode(value: T[] | null): Set<string> | null {
-    const validationMode = this.storage.validationMode(this.componentName)
-    const schema = this.storage.getSchema(this.componentName)
-    return (
-      value &&
-      new Set(
-        value
-          .filter(
-            (v) =>
-              validationMode === 'read' ||
-              schema === undefined ||
-              validateThrowing(schema, v),
-          )
-          .map((v) => JSON.stringify(v)),
-      )
-    )
+  encode(value: ComponentType<Components[K]>[] | null): Set<string> | null {
+    if (value === null) {
+      return null
+    }
+
+    const validateOnWrite = this.storage.validateOnWrite(this.componentName)
+    if (validateOnWrite) {
+      const schema = this.storage.getSchema(this.componentName)
+      if (schema) {
+        for (const v of value) {
+          validateThrowing(schema, v)
+        }
+      }
+    }
+
+    return new Set(value.map((v) => JSON.stringify(v)))
   }
 
-  decode(value: Set<string> | null): T[] | null {
-    const validationMode = this.storage.validationMode(this.componentName)
-    if (validationMode === 'read' || validationMode === 'readWrite') {
+  decode(value: Set<string> | null): ComponentType<Components[K]>[] | null {
+    if (this.storage.validateOnRead(this.componentName)) {
       const schema = this.storage.getSchema(this.componentName)
       if (schema !== undefined) {
-        const parser = json(schema as Schema<T>)
-        const result: T[] = []
+        const parser = json(schema as Schema<ComponentType<Components[K]>>)
+        const result: ComponentType<Components[K]>[] = []
         for (const v of value ?? []) {
           result.push(parseThrowing(parser, v))
         }
         return result
       }
     }
-    const result: T[] = []
+    const result: ComponentType<Components[K]>[] = []
     for (const v of value ?? []) {
       result.push(JSON.parse(v))
     }
     return result
   }
 
-  async setAdd(entityId: string, ...values: T[]): Promise<{ cursor: string }> {
+  async setAdd(
+    entityId: string,
+    ...values: ComponentType<Components[K]>[]
+  ): Promise<{ cursor: string }> {
     const lastModified = await this.storage.setAdd(
       this.componentName,
       entityId,
@@ -68,7 +75,7 @@ export class DynamoDbSetStorage<
 
   async conditionalSetAdd(
     entityId: string,
-    ...values: T[]
+    ...values: ComponentType<Components[K]>[]
   ): Promise<{ cursor: string }> {
     try {
       const lastModified = await this.storage.conditionalSetAdd(
@@ -88,7 +95,7 @@ export class DynamoDbSetStorage<
 
   async setDelete(
     entityId: string,
-    ...values: T[]
+    ...values: ComponentType<Components[K]>[]
   ): Promise<{ cursor: string }> {
     const lastModified = await this.storage.setDelete(
       this.componentName,
@@ -100,7 +107,7 @@ export class DynamoDbSetStorage<
 
   async conditionalSetDelete(
     entityId: string,
-    ...values: T[]
+    ...values: ComponentType<Components[K]>[]
   ): Promise<{ cursor: string }> {
     try {
       const lastModified = await this.storage.conditionalSetDelete(

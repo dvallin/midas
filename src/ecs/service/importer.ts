@@ -1,7 +1,7 @@
 import { Schema } from '@spaceteams/zap'
 import { ComponentStorage, UpdateStorage } from '../component'
 import { Batcher } from './batcher'
-import { Query } from './queries'
+import { Query } from './query'
 import { EntityId } from '../entity'
 
 export type ImporterConfig<T> = {
@@ -37,9 +37,11 @@ export class Importer<T> {
     const startCursor = await this.cursors.read(this.importName)
 
     let nextCursor = startCursor
-    for await (const batch of this.batcher.batch(
-      this.updateStorage.updates(startCursor ?? undefined),
-    )) {
+    for await (
+      const batch of this.batcher.batch(
+        this.updateStorage.updates(startCursor ?? undefined),
+      )
+    ) {
       if (batch.length === 0) {
         continue
       }

@@ -9,7 +9,7 @@ import {
 
 export function createTestDynamoDbStorage<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 >(clusterId: string, components: Components) {
   return pipeline()

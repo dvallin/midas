@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-elasticsearch-service'
 import { ContextExtensionMiddleware } from '..'
 import { ElasticsearchEndpointContext } from '../elasticsearch/elasticsearch-middleware'
+import { lens, mutate } from '../mutable-context'
 
 export type ElasticsearchServiceContext = {
   aws: {
@@ -18,13 +19,13 @@ export const elasticsearchServiceMiddleware = <C>(
 ): ContextExtensionMiddleware<C, ElasticsearchServiceContext> => {
   return async (_e, ctx, next) => {
     const client = new ElasticsearchServiceClient(config)
-    const c = ctx as { aws?: Record<string, unknown> }
     try {
-      if (!c.aws) {
-        c.aws = {}
-      }
-      c.aws.elasticsearchServiceClient = client
-      return await next(c as C & ElasticsearchServiceContext)
+      const nextContext = lens(
+        ctx,
+        'aws',
+        (aws) => mutate(aws, 'elasticsearchServiceClient', client),
+      )
+      return await next(nextContext)
     } finally {
       client.destroy()
     }

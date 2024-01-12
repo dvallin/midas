@@ -1,27 +1,27 @@
 import { QueryCommandOutput } from '@aws-sdk/lib-dynamodb'
+import { ScheduleStorage } from '../schedule-storage'
 import {
   BatchReadResult,
   BatchWrite,
   BatchWriteResult,
   ConditionalWriteError,
-  ScheduleStorage,
-} from '..'
+} from '../component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { ComponentConfig } from '../..'
 
 export class DynamoDbScheduleStorageStorage<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
-> implements ScheduleStorage
-{
+  K extends keyof Components,
+> implements ScheduleStorage {
   constructor(
-    protected componentName: string,
+    protected componentName: K,
     protected storage: DynamoDbStorage<Components>,
   ) {
     if (!storage.supports(componentName)) {
-      throw new Error(`${componentName} does not support dynamo db`)
+      throw new Error(`${componentName as string} does not support dynamo db`)
     }
   }
 
@@ -44,7 +44,8 @@ export class DynamoDbScheduleStorageStorage<
     const result = await this.read(entityId)
     if (!result) {
       throw new Error(
-        `could not find component ${this.componentName} for entity ${entityId}`,
+        `could not find component ${this
+          .componentName as string} for entity ${entityId}`,
       )
     }
     return result
@@ -97,14 +98,6 @@ export class DynamoDbScheduleStorageStorage<
         throw e
       }
     }
-  }
-
-  async readBeforeWriteUpdate(
-    entityId: string,
-    updater: (previous: Date | null | undefined) => Date,
-  ): Promise<{ cursor: string }> {
-    const previous = await this.read(entityId)
-    return this.conditionalWrite(entityId, updater(previous), previous)
   }
 
   async batchWrite(writes: BatchWrite<Date>[]): Promise<BatchWriteResult> {

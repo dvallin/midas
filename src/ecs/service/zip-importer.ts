@@ -1,6 +1,6 @@
 import { Schema } from '@spaceteams/zap'
 import { ComponentStorage, UpdateStorage } from '../component'
-import { GetResult, Query } from './queries'
+import { GetResult, Query } from './query'
 import { Batcher } from './batcher'
 import { EntityId } from '../entity'
 

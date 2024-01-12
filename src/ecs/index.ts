@@ -1,11 +1,17 @@
-import { Schema } from '@spaceteams/zap'
+import { InferType, Schema } from '@spaceteams/zap'
 import { ContextExtensionMiddleware } from '../middleware'
 
 export * as entity from './entity'
 export * as service from './service'
 export * as component from './component'
 
-export type ValidationMode = 'read' | 'write' | 'readWrite'
+/**
+ * When a component storage should validate the component against the schema
+ * read: _only_ on reading the data
+ * write: _only_ on writing the data
+ * all: on reading and writing the data
+ */
+export type ValidationMode = 'read' | 'write' | 'all'
 
 export type StorageConfig = {
   batchSize?: number
@@ -18,12 +24,15 @@ export type ComponentStorageConfig =
   }
   | { type: 'dynamo' }
   | { type: 'elastic' }
-export type ComponentConfig = {
+export type ComponentConfig<T> = {
   type: 'key' | 'set' | 'array' | 'default' | 'schedule'
-  tracksUpdates: boolean
-  schema?: Schema<unknown>
+  tracksUpdates?: boolean
+  schema?: Schema<T>
+  group?: string
   storageConfig: StorageConfig & ComponentStorageConfig
 }
+export type ComponentType<T extends { schema?: unknown }> = T['schema'] extends
+  undefined ? unknown : InferType<T['schema']>
 const defaultComponentStorageConfig: StorageConfig & ComponentStorageConfig = {
   type: 'memory',
 }
@@ -33,20 +42,19 @@ export function componentStorageConfig(
   return { ...defaultComponentStorageConfig, ...config }
 }
 
-const defaultComponentConfig: ComponentConfig = {
+const defaultComponentConfig: ComponentConfig<unknown> = {
   type: 'default',
-  tracksUpdates: false,
   storageConfig: defaultComponentStorageConfig,
 }
-export function componentConfig(
-  config: Partial<ComponentConfig>,
-): ComponentConfig {
-  return { ...defaultComponentConfig, ...config }
+export function componentConfig<T>(
+  config: Partial<ComponentConfig<T>>,
+): ComponentConfig<T> {
+  return { ...defaultComponentConfig, ...config } as ComponentConfig<T>
 }
 
 export type EcsBaseContext<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 > = {
   clusterId: string
@@ -58,7 +66,7 @@ export type InferComponents<T> = T extends EcsBaseContext<infer C> ? C : never
 export const ecsBaseMiddleware = <
   C,
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 >(
   clusterId: string,
@@ -69,6 +77,7 @@ export const ecsBaseMiddleware = <
   EcsBaseContext<Components>
 > => {
   return async (_e, ctx, next) => {
+    console.log('build base context')
     const c = ctx as Record<string, unknown>
     c.clusterId = clusterId
     c.components = components

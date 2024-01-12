@@ -1,39 +1,48 @@
-import { ComponentStorage } from '..'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing, validateThrowing } from './schema-parse'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
-import { ComponentConfig } from '../..'
+import { ComponentStorage } from '../component-storage'
+import { ComponentConfig, ComponentType } from '../..'
 
 export class DynamoDbComponentStorage<
-  T,
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
-> extends AbstractDynamoDbComponentStorage<T, string, Components>
-  implements ComponentStorage<T> {
-  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
+  K extends keyof Components,
+> extends AbstractDynamoDbComponentStorage<
+  ComponentType<Components[K]>,
+  string,
+  Components
+> implements ComponentStorage<ComponentType<Components[K]>> {
+  constructor(componentName: K, storage: DynamoDbStorage<Components>) {
     super(componentName, storage)
   }
 
-  encode(value: T | null): string | null {
-    const validationMode = this.storage.validationMode(this.componentName)
-    if (validationMode === 'write' || validationMode === 'readWrite') {
-      const schema = this.storage.getSchema(this.componentName)
-      schema && validateThrowing(schema, value)
-    }
-    return value && JSON.stringify(value)
-  }
-
-  decode(value: string | null): T | null {
+  encode(value: ComponentType<Components[K]> | null): string | null {
     if (value === null) {
       return null
     }
-    const validationMode = this.storage.validationMode(this.componentName)
-    if (validationMode === 'read' || validationMode === 'readWrite') {
+
+    const validateOnWrite = this.storage.validateOnWrite(this.componentName)
+    if (validateOnWrite) {
+      const schema = this.storage.getSchema(this.componentName)
+      if (schema) {
+        validateThrowing(schema, value)
+      }
+    }
+
+    return JSON.stringify(value)
+  }
+
+  decode(value: string | null): ComponentType<Components[K]> | null {
+    if (value === null) {
+      return null
+    }
+    if (this.storage.validateOnRead(this.componentName)) {
       const schema = this.storage.getSchema(this.componentName)
       if (schema !== undefined) {
-        const parser = json(schema as Schema<T>)
+        const parser = json(schema as Schema<ComponentType<Components[K]>>)
         return parseThrowing(parser, value)
       }
     }

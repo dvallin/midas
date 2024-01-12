@@ -1,4 +1,4 @@
-import { UpdateStorage } from '..'
+import { UpdateStorage } from '../update-storage'
 import { InMemoryComponentStorage } from './in-memory-component-storage'
 
 export class InMemoryUpdateStorage<T> extends InMemoryComponentStorage<T>

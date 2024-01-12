@@ -21,12 +21,11 @@ import {
   ValidationMode,
 } from '../..'
 import { addDays, differenceInDays, startOfDay } from 'date-fns'
-import { BatchWrite } from '..'
-import { validateThrowing } from './schema-parse'
+import { BatchWrite } from '../component-storage'
 
 export type DynamoDbStorageContext<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 > =
   & DynamoDbContext
@@ -43,7 +42,7 @@ export type DynamoDbStorageContext<
   }
 export const dynamoDbStorageContextMiddleware = <
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
   C extends DynamoDbContext & EcsBaseContext<Components> & TimeContext,
 >(
@@ -70,7 +69,7 @@ export const dynamoDbStorageContextMiddleware = <
 
 export class DynamoDbStorage<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 > {
   protected readonly client: DynamoDBDocument
@@ -88,38 +87,55 @@ export class DynamoDbStorage<
       context.storage.dynamodb.config.returnConsumedCapacity
     this.time = context.service.time
     this.batchSize = Math.min(context.storage.batchSize ?? 10, 25)
-    this.defaultValidationMode = context.storage.validationMode ?? 'readWrite'
+    this.defaultValidationMode = context.storage.validationMode ?? 'all'
   }
 
-  supports(componentName: string) {
+  supports(componentName: keyof Components) {
     return this.components[componentName].storageConfig.type === 'dynamo'
   }
 
-  getTableName(componentName: string) {
-    return `${this.clusterId}_component_${componentName}`
+  getTableName(componentName: keyof Components) {
+    return `${this.clusterId}_${
+      this.components[componentName].group ??
+        `component_${componentName as string}`
+    }`
   }
 
-  getSchema(componentName: string) {
+  getKey(componentName: keyof Components, entityId: string) {
+    if (this.components[componentName].group) {
+      return { entityId, componentName }
+    }
+    return { entityId }
+  }
+
+  getSchema(componentName: keyof Components) {
     return this.components[componentName].schema
   }
 
-  validationMode(componentName: string) {
+  private validationMode(componentName: keyof Components) {
     return (
       this.components[componentName].storageConfig.validationMode ??
         this.defaultValidationMode
     )
   }
 
+  validateOnRead(componentName: keyof Components) {
+    const mode = this.validationMode(componentName)
+    return mode === 'all' || mode === 'read'
+  }
+  validateOnWrite(componentName: keyof Components) {
+    const mode = this.validationMode(componentName)
+    return mode === 'all' || mode === 'write'
+  }
+
   async read<T>(
-    componentName: string,
+    componentName: keyof Components,
     entityId: string,
   ): Promise<T | undefined | null> {
     const result = await this.client.get({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
     })
     if (result.Item === undefined) {
       return undefined
@@ -127,8 +143,29 @@ export class DynamoDbStorage<
     return result.Item?.component ?? null
   }
 
+  async readGroup(
+    componentNames: (keyof Components)[],
+    entityId: string,
+  ): Promise<{ [componentName in keyof Components]: unknown }> {
+    const tableName = this.getTableName(componentNames[0])
+    const { Items } = await this.client.query({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      TableName: tableName,
+      KeyConditionExpression: 'entityId = :entityId',
+      ExpressionAttributeValues: {
+        ':entityId': entityId,
+      },
+      ProjectionExpression: 'entityId, componentName, component',
+    })
+    const result: { [componentName: string]: unknown } = {}
+    for (const item of Items ?? []) {
+      result[item.componentName] = item.component
+    }
+    return result as { [componentName in keyof Components]: unknown }
+  }
+
   async batchRead<T>(
-    componentName: string,
+    componentName: keyof Components,
     entityIds: string[],
   ): Promise<{
     components: { [entityId: string]: T | undefined | null }
@@ -148,7 +185,9 @@ export class DynamoDbStorage<
           ReturnConsumedCapacity: this.returnConsumedCapacity,
           RequestItems: {
             [tableName]: {
-              Keys: batch.map((v) => ({ entityId: v })),
+              Keys: batch.map((entityId) =>
+                this.getKey(componentName, entityId)
+              ),
             },
           },
         }),
@@ -171,11 +210,11 @@ export class DynamoDbStorage<
     }
   }
 
-  async getByKey(componentName: string, key: string) {
+  async getByKey(componentName: keyof Components, key: string) {
     const componentType = this.components[componentName].type
     if (componentType !== 'key') {
       throw new Error(
-        `cannot perform a get by key on component ${componentName} of type ${componentType}`,
+        `cannot perform a get by key on component ${componentName as string} of type ${componentType}`,
       )
     }
     const tableName = this.getTableName(componentName)
@@ -196,7 +235,7 @@ export class DynamoDbStorage<
   }
 
   async all(
-    componentName: string,
+    componentName: keyof Components,
     exclusiveStartKey?: Record<string, unknown>,
   ) {
     const tableName = this.getTableName(componentName)
@@ -208,7 +247,7 @@ export class DynamoDbStorage<
   }
 
   async allSchedules(
-    componentName: string,
+    componentName: keyof Components,
     exclusiveStartKey?: Record<string, unknown>,
   ) {
     const tableName = this.getTableName(componentName)
@@ -220,14 +259,18 @@ export class DynamoDbStorage<
     })
   }
 
-  async write(componentName: string, entityId: string, component: unknown) {
+  async write(
+    componentName: keyof Components,
+    entityId: string,
+    component: unknown,
+  ) {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
     await this.client.put({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
       Item: {
-        entityId,
+        ...this.getKey(componentName, entityId),
         component,
         lastModifiedDate,
         lastModified,
@@ -236,13 +279,48 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  async readSchedule(componentName: string, entityId: string) {
+  async writeGroup(
+    entityId: string,
+    writes: { component: unknown; componentName: keyof Components }[],
+  ) {
+    const tableName = this.getTableName(writes[0].componentName)
+    const lastModified = this.time.now
+    const lastModifiedDate = this.getDateString(lastModified)
+    const unprocessed: string[] = []
+
+    const requests = []
+    for (const { componentName, component } of writes) {
+      requests.push({
+        PutRequest: {
+          Item: {
+            ...this.getKey(componentName, entityId),
+            component,
+            lastModifiedDate,
+            lastModified,
+          },
+        },
+      })
+    }
+
+    const result = await this.client.batchWrite({
+      ReturnConsumedCapacity: this.returnConsumedCapacity,
+      RequestItems: {
+        [tableName]: requests,
+      },
+    })
+
+    for (const item of result.UnprocessedItems?.[tableName] ?? []) {
+      unprocessed.push(item.PutRequest?.Item?.entityId.S)
+    }
+
+    return { unprocessed, lastModified }
+  }
+
+  async readSchedule(componentName: keyof Components, entityId: string) {
     const result = await this.client.get({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
     })
     if (result.Item === undefined) {
       return undefined
@@ -251,7 +329,7 @@ export class DynamoDbStorage<
   }
 
   async batchReadSchedule(
-    componentName: string,
+    componentName: keyof Components,
     entityIds: string[],
   ): Promise<{
     schedules: { [entityId: string]: number | undefined | null }
@@ -271,7 +349,9 @@ export class DynamoDbStorage<
           ReturnConsumedCapacity: this.returnConsumedCapacity,
           RequestItems: {
             [tableName]: {
-              Keys: batch.map((v) => ({ entityId: v })),
+              Keys: batch.map((entityId) =>
+                this.getKey(componentName, entityId)
+              ),
             },
           },
         }),
@@ -294,7 +374,10 @@ export class DynamoDbStorage<
     }
   }
 
-  async batchWriteSchedules(componentName: string, writes: BatchWrite<Date>[]) {
+  async batchWriteSchedules(
+    componentName: keyof Components,
+    writes: BatchWrite<Date>[],
+  ) {
     const tableName = this.getTableName(componentName)
 
     const lastModifiedByEntityId: { [entityId: string]: number } = {}
@@ -306,11 +389,13 @@ export class DynamoDbStorage<
       const batch = ops.splice(0, this.batchSize)
 
       const requests = []
+
+      const lastModified = this.time.now
+      const lastModifiedDate = this.getDateString(lastModified)
+
       for (const { entityId, component } of batch) {
         const schedule = component.valueOf()
         const scheduleDate = this.getDateString(schedule)
-        const lastModified = this.time.now
-        const lastModifiedDate = this.getDateString(lastModified)
         lastModifiedByEntityId[entityId] = lastModified
         requests.push({
           PutRequest: {
@@ -344,7 +429,11 @@ export class DynamoDbStorage<
     return { unprocessed, lastModifiedByEntityId }
   }
 
-  async writeSchedule(componentName: string, entityId: string, date: Date) {
+  async writeSchedule(
+    componentName: keyof Components,
+    entityId: string,
+    date: Date,
+  ) {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
     const schedule = date.valueOf()
@@ -363,7 +452,7 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  async deleteSchedule(componentName: string, entityId: string) {
+  async deleteSchedule(componentName: keyof Components, entityId: string) {
     const lastModified = this.time.now
     const lastModifiedDate = this.getDateString(lastModified)
     await this.client.update({
@@ -387,17 +476,18 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  delete(componentName: string, entityId: string) {
+  delete(componentName: keyof Components, entityId: string) {
     return this.client.delete({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
     })
   }
 
-  async batchWrite(componentName: string, writes: BatchWrite<unknown>[]) {
+  async batchWrite(
+    componentName: keyof Components,
+    writes: BatchWrite<unknown>[],
+  ) {
     const tableName = this.getTableName(componentName)
 
     const lastModifiedByEntityId: { [entityId: string]: number } = {}
@@ -408,15 +498,16 @@ export class DynamoDbStorage<
     while (ops.length) {
       const batch = ops.splice(0, this.batchSize)
 
+      const lastModified = this.time.now
+      const lastModifiedDate = this.getDateString(lastModified)
+
       const requests = []
       for (const { entityId, component } of batch) {
-        const lastModified = this.time.now
-        const lastModifiedDate = this.getDateString(lastModified)
         lastModifiedByEntityId[entityId] = lastModified
         requests.push({
           PutRequest: {
             Item: {
-              entityId,
+              ...this.getKey(componentName, entityId),
               component,
               lastModifiedDate,
               lastModified,
@@ -445,7 +536,7 @@ export class DynamoDbStorage<
   }
 
   async conditionalWrite(
-    componentName: string,
+    componentName: keyof Components,
     entityId: string,
     current: unknown,
     previous: unknown | undefined = undefined,
@@ -456,7 +547,7 @@ export class DynamoDbStorage<
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
       Item: {
-        entityId,
+        ...this.getKey(componentName, entityId),
         component: current,
         lastModified,
         lastModifiedDate,
@@ -472,7 +563,7 @@ export class DynamoDbStorage<
   }
 
   async conditionalWriteSchedule(
-    componentName: string,
+    componentName: keyof Components,
     entityId: string,
     current: Date,
     previous: Date | undefined = undefined,
@@ -502,14 +593,14 @@ export class DynamoDbStorage<
   }
 
   async updates(
-    componentName: string,
+    componentName: keyof Components,
     lastModified: number,
     exclusiveStartKey?: Record<string, unknown>,
   ) {
     const tracksUpdates = this.components[componentName].tracksUpdates
     if (!tracksUpdates) {
       throw new Error(
-        `component ${componentName} does not support update tracking`,
+        `component ${componentName as string} does not support update tracking`,
       )
     }
     const lastModifiedDate = this.getDateString(lastModified)
@@ -530,14 +621,14 @@ export class DynamoDbStorage<
   }
 
   async schedules(
-    componentName: string,
+    componentName: keyof Components,
     cursor: number,
     exclusiveStartKey?: Record<string, unknown>,
   ) {
     const type = this.components[componentName].type
     if (type !== 'schedule') {
       throw new Error(
-        `component ${componentName} does not support next update tracking`,
+        `component ${componentName as string} does not support next update tracking`,
       )
     }
     const scheduleDate = this.getDateString(cursor)
@@ -578,11 +669,15 @@ export class DynamoDbStorage<
     return result
   }
 
-  async arrayPush(componentName: string, entityId: string, component: unknown) {
+  async arrayPush(
+    componentName: keyof Components,
+    entityId: string,
+    component: unknown,
+  ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'array') {
       throw new Error(
-        `cannot perform a array:push on component ${componentName} of type ${componentType}`,
+        `cannot perform a array:push on component ${componentName as string} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -590,9 +685,7 @@ export class DynamoDbStorage<
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
       UpdateExpression:
         'SET #component = list_append(if_not_exists(#component, :empty_list), :value), lastModified = :lastModified, lastModifiedDate = :lastModifiedDate',
       ExpressionAttributeNames: {
@@ -609,11 +702,15 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  async arrayRemove(componentName: string, entityId: string, index: number) {
+  async arrayRemove(
+    componentName: keyof Components,
+    entityId: string,
+    index: number,
+  ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'array') {
       throw new Error(
-        `cannot perform a array:remove on component ${componentName} of type ${componentType}`,
+        `cannot perform a array:remove on component ${componentName as string} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -621,9 +718,7 @@ export class DynamoDbStorage<
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
       UpdateExpression: `REMOVE #component[${index}]
        SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate`,
       ExpressionAttributeNames: {
@@ -639,11 +734,15 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  async setAdd(componentName: string, entityId: string, values: string[]) {
+  async setAdd(
+    componentName: keyof Components,
+    entityId: string,
+    values: string[],
+  ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
-        `cannot perform a set:add on component ${componentName} of type ${componentType}`,
+        `cannot perform a set:add on component ${componentName as string} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -651,9 +750,7 @@ export class DynamoDbStorage<
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
       UpdateExpression: `ADD #component :value
          SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
         `,
@@ -671,14 +768,14 @@ export class DynamoDbStorage<
   }
 
   async conditionalSetAdd(
-    componentName: string,
+    componentName: keyof Components,
     entityId: string,
     values: string[],
   ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
-        `cannot perform a conditional set:add on component ${componentName} of type ${componentType}`,
+        `cannot perform a conditional set:add on component ${componentName as string} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -696,9 +793,7 @@ export class DynamoDbStorage<
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
       UpdateExpression: `ADD #component :value
          SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
         `,
@@ -714,11 +809,15 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  async setDelete(componentName: string, entityId: string, values: string[]) {
+  async setDelete(
+    componentName: keyof Components,
+    entityId: string,
+    values: string[],
+  ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
-        `cannot perform a set:delete on component ${componentName} of type ${componentType}`,
+        `cannot perform a set:delete on component ${componentName as string} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -726,9 +825,7 @@ export class DynamoDbStorage<
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
       UpdateExpression: `DELETE #component :value
         SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
         `,
@@ -746,14 +843,14 @@ export class DynamoDbStorage<
   }
 
   async conditionalSetDelete(
-    componentName: string,
+    componentName: keyof Components,
     entityId: string,
     values: string[],
   ) {
     const componentType = this.components[componentName].type
     if (componentType !== 'set') {
       throw new Error(
-        `cannot perform a conditional set:delete on component ${componentName} of type ${componentType}`,
+        `cannot perform a conditional set:delete on component ${componentName as string} of type ${componentType}`,
       )
     }
     const lastModified = this.time.now
@@ -771,9 +868,7 @@ export class DynamoDbStorage<
     await this.client.update({
       ReturnConsumedCapacity: this.returnConsumedCapacity,
       TableName: this.getTableName(componentName),
-      Key: {
-        entityId,
-      },
+      Key: this.getKey(componentName, entityId),
       UpdateExpression: `DELETE #component :value
         SET lastModified = :lastModified, lastModifiedDate = :lastModifiedDate
         `,
@@ -789,7 +884,9 @@ export class DynamoDbStorage<
     return lastModified
   }
 
-  defaultPrimaryTableMigration(componentName: string): CreateTableCommandInput {
+  defaultPrimaryTableMigration(
+    componentName: keyof Components,
+  ): CreateTableCommandInput {
     return {
       TableName: this.getTableName(componentName),
       KeySchema: [{ AttributeName: 'entityId', KeyType: 'HASH' }],
@@ -801,9 +898,35 @@ export class DynamoDbStorage<
     }
   }
 
+  groupPrimaryTableMigration(componentName: string): CreateTableCommandInput {
+    return {
+      TableName: this.getTableName(componentName),
+      KeySchema: [
+        { AttributeName: 'entityId', KeyType: 'HASH' },
+        { AttributeName: 'componentName', KeyType: 'RANGE' },
+      ],
+      AttributeDefinitions: [
+        { AttributeName: 'entityId', AttributeType: 'S' },
+        { AttributeName: 'componentName', AttributeType: 'S' },
+      ],
+      ProvisionedThroughput: {
+        ReadCapacityUnits: 5,
+        WriteCapacityUnits: 5,
+      },
+    }
+  }
+
   async migrate() {
+    const groups: { [key: string]: string[] } = {}
     for (const componentName of Object.keys(this.components)) {
-      const { type, tracksUpdates } = this.components[componentName]
+      const { type, tracksUpdates, group } = this.components[componentName]
+      if (group) {
+        if (!groups[group]) {
+          groups[group] = []
+        }
+        groups[group].push(componentName)
+        continue
+      }
       const primaryTable = this.defaultPrimaryTableMigration(componentName)
 
       if (type === 'key') {
@@ -882,10 +1005,32 @@ export class DynamoDbStorage<
       }
       await this.client.send(new CreateTableCommand(primaryTable))
     }
+    for (const groupConfig of Object.values(groups)) {
+      const componentName = groupConfig[0]
+      const primaryTable = this.groupPrimaryTableMigration(componentName)
+      await this.client.send(new CreateTableCommand(primaryTable))
+    }
   }
 
   async teardown() {
+    const groups: { [key: string]: string[] } = {}
     for (const componentName of Object.keys(this.components)) {
+      const { group } = this.components[componentName]
+      if (group) {
+        if (!groups[group]) {
+          groups[group] = []
+        }
+        groups[group].push(componentName)
+        continue
+      }
+      await this.client.send(
+        new DeleteTableCommand({
+          TableName: this.getTableName(componentName),
+        }),
+      )
+    }
+    for (const groupConfig of Object.values(groups)) {
+      const componentName = groupConfig[0]
       await this.client.send(
         new DeleteTableCommand({
           TableName: this.getTableName(componentName),

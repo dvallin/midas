@@ -1,15 +1,16 @@
-import { KeyStorage } from '..'
 import { ComponentConfig } from '../..'
+import { KeyStorage } from '../key-storage'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 
 export class DynamoDbKeyStorage<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
+  K extends keyof Components,
 > extends AbstractDynamoDbComponentStorage<string, string, Components>
   implements KeyStorage {
-  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
+  constructor(componentName: K, storage: DynamoDbStorage<Components>) {
     super(componentName, storage)
   }
 
@@ -29,7 +30,8 @@ export class DynamoDbKeyStorage<
     const entityId = await this.storage.getByKey(this.componentName, key)
     if (entityId === undefined) {
       throw new Error(
-        `could not find entity by key ${key} in component ${this.componentName}`,
+        `could not find entity by key ${key} in component ${this
+          .componentName as string}`,
       )
     }
     return entityId

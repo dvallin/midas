@@ -1,47 +1,57 @@
-import { ArrayStorage } from '..'
 import { AbstractDynamoDbComponentStorage } from './abstract-dynamo-db-component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { json, Schema } from '@spaceteams/zap'
 import { parseThrowing, validateThrowing } from './schema-parse'
-import { ComponentConfig } from '../..'
+import { ComponentConfig, ComponentType } from '../..'
+import { ArrayStorage } from '../array-storage'
 
 export class DynamoDbArrayStorage<
-  T,
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
-> extends AbstractDynamoDbComponentStorage<T[], string[], Components>
-  implements ArrayStorage<T> {
-  constructor(componentName: string, storage: DynamoDbStorage<Components>) {
-    super(componentName, storage)
+  K extends keyof Components,
+> extends AbstractDynamoDbComponentStorage<
+  ComponentType<Components[K]>[],
+  string[],
+  Components
+> implements ArrayStorage<ComponentType<Components[K]>> {
+  constructor(componentName: K, storage: DynamoDbStorage<Components>) {
+    super(componentName as string, storage)
   }
 
-  encode(value: T[]): string[] {
-    const validationMode = this.storage.validationMode(this.componentName)
-    const schema = this.storage.getSchema(this.componentName)
-    return value
-      .filter(
-        (v) =>
-          validationMode === 'read' ||
-          schema === undefined ||
-          validateThrowing(schema, v),
-      )
-      .map((v) => JSON.stringify(v))
+  encode(value: ComponentType<Components[K]>[] | null): string[] | null {
+    if (value === null) {
+      return null
+    }
+
+    const validateOnWrite = this.storage.validateOnWrite(this.componentName)
+    if (validateOnWrite) {
+      const schema = this.storage.getSchema(this.componentName)
+      if (schema) {
+        for (const v of value) {
+          validateThrowing(schema, v)
+        }
+      }
+    }
+
+    return value.map((v) => JSON.stringify(v))
   }
 
-  decode(value: string[] | null): T[] {
-    const validationMode = this.storage.validationMode(this.componentName)
-    if (validationMode === 'read' || validationMode === 'readWrite') {
+  decode(value: string[] | null): ComponentType<Components[K]>[] {
+    if (this.storage.validateOnRead(this.componentName)) {
       const schema = this.storage.getSchema(this.componentName)
       if (schema !== undefined) {
-        const parser = json(schema as Schema<T>)
+        const parser = json(schema as Schema<ComponentType<Components[K]>>)
         return (value ?? []).map((v) => parseThrowing(parser, v))
       }
     }
     return (value ?? []).map((v) => JSON.parse(v))
   }
 
-  async arrayPush(entityId: string, component: T): Promise<{ cursor: string }> {
+  async arrayPush(
+    entityId: string,
+    component: ComponentType<Components[K]>,
+  ): Promise<{ cursor: string }> {
     const lastModified = await this.storage.arrayPush(
       this.componentName,
       entityId,

@@ -1,4 +1,4 @@
-import { ScheduleStorage } from '..'
+import { ScheduleStorage } from '../schedule-storage'
 import { InMemoryComponentStorage } from './in-memory-component-storage'
 
 export class InMemoryScheduleStorage extends InMemoryComponentStorage<Date>

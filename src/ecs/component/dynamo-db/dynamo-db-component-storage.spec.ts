@@ -67,10 +67,7 @@ productVariantsUsecase(() => ({
 
 describe('updates', () => {
   it('works for updates over multiple days', async () => {
-    const test = new DynamoDbComponentStorage<string>(
-      'componentStorageTest',
-      storage,
-    )
+    const test = new DynamoDbComponentStorage('componentStorageTest', storage)
     const testUpdates = new DynamoDbUpdateStorage(
       'componentStorageTest',
       storage,

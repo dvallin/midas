@@ -5,24 +5,24 @@ import {
   BatchWriteResult,
   ComponentStorage,
   ConditionalWriteError,
-} from '..'
+} from '../component-storage'
 import { DynamoDbStorage } from './dynamo-db-storage'
 import { ComponentConfig } from '../..'
+import { ComponentEncoder } from '../component-encoder'
 
 export abstract class AbstractDynamoDbComponentStorage<
   T,
   E,
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
-> implements ComponentStorage<T>
-{
+> implements ComponentStorage<T>, ComponentEncoder<T, E> {
   constructor(
-    protected componentName: string,
+    protected componentName: keyof Components,
     protected storage: DynamoDbStorage<Components>,
   ) {
     if (!storage.supports(componentName)) {
-      throw new Error(`${componentName} does not support dynamo db`)
+      throw new Error(`${componentName as string} does not support dynamo db`)
     }
   }
 
@@ -41,7 +41,8 @@ export abstract class AbstractDynamoDbComponentStorage<
     const result = await this.read(entityId)
     if (!result) {
       throw new Error(
-        `could not find component ${this.componentName} for entity ${entityId}`,
+        `could not find component ${this
+          .componentName as string} for entity ${entityId}`,
       )
     }
     return result
@@ -75,19 +76,6 @@ export abstract class AbstractDynamoDbComponentStorage<
       } else {
         throw e
       }
-    }
-  }
-
-  async readBeforeWriteUpdate(
-    entityId: string,
-    updater: (previous: T | null | undefined) => T,
-  ): Promise<{ cursor: string; component: T }> {
-    const previous = await this.read(entityId)
-    const component = updater(previous)
-    const result = await this.conditionalWrite(entityId, component, previous)
-    return {
-      ...result,
-      component,
     }
   }
 

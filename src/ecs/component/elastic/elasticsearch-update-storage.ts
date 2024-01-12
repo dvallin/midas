@@ -1,10 +1,10 @@
-import { UpdateStorage } from '..'
 import { ComponentConfig } from '../..'
+import { UpdateStorage } from '../update-storage'
 import { ElasticsearchStorage } from './elasticsearch-storage'
 
 export class ElasticsearchUpdateStorage<
   Components extends {
-    [componentName: string]: ComponentConfig
+    [componentName: string]: ComponentConfig<unknown>
   },
 > implements UpdateStorage {
   constructor(

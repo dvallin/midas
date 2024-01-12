@@ -2,6 +2,7 @@
   "name": "mira",
   "version": "0.0.1",
   "description": "typesafe middleware for about anything",
+  "type": "module",
   "scripts": {
     "test": "TZ=UTC vitest",
     "test:ci": "vitest run",
