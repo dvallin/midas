@@ -3,9 +3,9 @@ import {
   BatchWrite,
   BatchWriteError,
   BatchWriteResult,
-  ComponentStorage,
 } from '..'
 import { ComponentConfig } from '../..'
+import { SearchStorage } from '../search-storage'
 import { ElasticsearchStorage } from './elasticsearch-storage'
 
 type ResponseError = {
@@ -25,12 +25,12 @@ function isResponseError(e: unknown): e is ResponseError {
   )
 }
 
-export class ElasticsearchComponentStorage<
+export class ElasticsearchSearchStorage<
   T,
   Components extends {
     [componentName: string]: ComponentConfig<unknown>
   },
-> implements ComponentStorage<T> {
+> implements SearchStorage<T> {
   constructor(
     protected readonly componentName: string,
     protected readonly storage: ElasticsearchStorage<Components>,
@@ -120,6 +120,38 @@ export class ElasticsearchComponentStorage<
     for (const { entityId } of writes) {
       const lastModified = batchWriteResult.lastModifiedByEntityId[entityId]
       result[entityId] = { cursor: lastModified.toString() }
+    }
+    return result
+  }
+
+  async match(
+    value: Partial<T>,
+  ): Promise<{ entityId: string; component: T }[]> {
+    const response = await this.storage.match(this.componentName, value)
+
+    const result: { entityId: string; component: T }[] = []
+    for (const hit of response.hits.hits) {
+      const entityId = hit._id
+      const component = hit._source?.component
+      if (!component) {
+        throw new Error('component missing')
+      }
+      result.push({ entityId, component })
+    }
+    return result
+  }
+
+  async suggest(key: keyof T, match: Partial<T>): Promise<string[]> {
+    const response = await this.storage.prefix(this.componentName, key, match)
+
+    console.log(response.aggregations?.component)
+    const result: string[] = []
+    const aggregations = response.aggregations?.component as Record<
+      string,
+      { buckets: { key: string; doc_count: number }[] }
+    >
+    for (const hit of aggregations[key as string].buckets) {
+      result.push(hit.key)
     }
     return result
   }

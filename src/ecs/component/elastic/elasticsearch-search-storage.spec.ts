@@ -1,4 +1,4 @@
-import { ElasticsearchComponentStorage } from './elasticsearch-component-storage'
+import { ElasticsearchSearchStorage } from './elasticsearch-search-storage'
 import { ElasticsearchUpdateStorage } from './elasticsearch-update-storage'
 import componentStorageSpec from '../component-storage-spec'
 import { pipeline } from '../../../pipeline'
@@ -18,6 +18,7 @@ import {
   ecsBaseMiddleware,
 } from '../..'
 import { string } from '@spaceteams/zap'
+import dataEntrySpec, { ProductSchema } from '../../use-cases/data-entry'
 
 const storage = await pipeline()
   .use(
@@ -26,6 +27,12 @@ const storage = await pipeline()
         type: 'default',
         tracksUpdates: true,
         schema: string(),
+        storageConfig: componentStorageConfig({ type: 'elastic' }),
+      }),
+      dataEntrySpec: componentConfig({
+        type: 'default',
+        tracksUpdates: false,
+        schema: ProductSchema,
         storageConfig: componentStorageConfig({ type: 'elastic' }),
       }),
     }),
@@ -41,6 +48,10 @@ beforeAll(() => storage.migrate())
 afterAll(() => storage.teardown())
 
 componentStorageSpec(() => ({
-  storage: new ElasticsearchComponentStorage('componentStorageSpec', storage),
+  storage: new ElasticsearchSearchStorage('componentStorageSpec', storage),
   updates: new ElasticsearchUpdateStorage('componentStorageSpec', storage),
+}))
+
+dataEntrySpec(() => ({
+  dataset: new ElasticsearchSearchStorage('dataEntrySpec', storage),
 }))

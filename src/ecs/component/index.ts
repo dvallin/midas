@@ -4,6 +4,7 @@ export * from './key-storage'
 export * from './schedule-storage'
 export * from './set-storage'
 export * from './update-storage'
+export * from './search-storage'
 
 export * from './in-memory'
 export * from './dynamo-db'

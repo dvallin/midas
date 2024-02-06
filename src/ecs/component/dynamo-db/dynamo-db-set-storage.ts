@@ -17,11 +17,8 @@ export class DynamoDbSetStorage<
   Set<string>,
   Components
 > implements SetStorage<ComponentType<Components[K]>> {
-  constructor(
-    componentName: keyof Components,
-    storage: DynamoDbStorage<Components>,
-  ) {
-    super(componentName as string, storage)
+  constructor(componentName: K, storage: DynamoDbStorage<Components>) {
+    super(componentName, storage)
   }
 
   encode(value: ComponentType<Components[K]>[] | null): Set<string> | null {

@@ -1,2 +1,2 @@
-export * from './elasticsearch-component-storage'
+export * from './elasticsearch-search-storage'
 export * from './elasticsearch-update-storage'

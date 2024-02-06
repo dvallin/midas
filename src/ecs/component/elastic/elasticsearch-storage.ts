@@ -9,6 +9,11 @@ import {
 } from '../..'
 import { ContextExtensionMiddleware } from '../../../middleware'
 import { BatchWrite, ConditionalWriteError } from '../component-storage'
+import {
+  MappingProperty,
+  QueryDslBoolQuery,
+} from '@elastic/elasticsearch/lib/api/types'
+import { Schema } from '@spaceteams/zap'
 
 export type ElasticsearchStorageContext<
   Components extends {
@@ -231,15 +236,92 @@ export class ElasticsearchStorage<
     })
   }
 
+  match<T>(componentName: string, match: Partial<T>) {
+    return this.client.search<{ component: T }>({
+      index: this.getIndex(componentName),
+      query: {
+        nested: {
+          path: 'component',
+          query: {
+            bool: {
+              must: Object.entries(match).map(([key, value]) => ({
+                match: { [`component.${key}`]: value },
+              })),
+            } as QueryDslBoolQuery,
+          },
+        },
+      },
+    })
+  }
+
+  prefix<T>(componentName: string, key: keyof T, match: Partial<T>) {
+    return this.client.search<{ component: T }>({
+      index: this.getIndex(componentName),
+      query: {
+        nested: {
+          path: 'component',
+          query: {
+            bool: {
+              must: Object.entries(match).map(([key, value]) => ({
+                prefix: { [`component.${key}`]: value },
+              })),
+            } as QueryDslBoolQuery,
+          },
+        },
+      },
+      aggs: {
+        component: {
+          nested: { path: 'component' },
+          aggs: {
+            [key]: {
+              terms: {
+                field: `component.${key as string}`,
+              },
+            },
+          },
+        },
+      },
+    })
+  }
+
+  mappingPropertyFromSchema(schema: Schema<unknown>): MappingProperty {
+    const meta = schema.meta()
+    switch (meta.type) {
+      case 'object': {
+        const objectMeta = meta as unknown as {
+          type: 'object'
+          schema: { [key: string]: Schema<unknown> }
+          additionalProperties: boolean | Schema<unknown>
+        }
+        const properties: Record<string, MappingProperty> = {}
+        for (const [key, inner] of Object.entries(objectMeta.schema)) {
+          properties[key] = this.mappingPropertyFromSchema(inner)
+        }
+        return {
+          type: 'nested',
+          properties,
+        }
+      }
+      default: {
+        return {
+          type: 'keyword',
+        }
+      }
+    }
+  }
+
   async migrate() {
     for (const componentName of Object.keys(this.context.components)) {
+      const schema = this.components[componentName].schema
       await this.client.indices.create({
         index: this.getIndex(componentName),
         mappings: {
           properties: {
             lastModified: { type: 'double' },
-            // TODO: infer from type and schema
-            component: { type: 'keyword' },
+            // TODO: infer from type and schema. Add support for meta information
+            component: schema
+              ? this.mappingPropertyFromSchema(schema)
+              : { type: 'keyword' },
           },
         },
       })
