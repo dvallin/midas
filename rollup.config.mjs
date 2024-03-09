@@ -4,7 +4,7 @@ import commonjs from '@rollup/plugin-commonjs'
 import json from '@rollup/plugin-json'
 
 export default {
-  input: 'src/index.ts',
+  input: 'editor/index.ts',
   output: {
     file: 'dist/index.js',
     format: 'cjs',

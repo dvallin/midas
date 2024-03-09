@@ -1,0 +1,13 @@
+{
+  "name": "ecs-elasticsearch",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "vitest",
+    "test:ci": "vitest run"
+  },
+  "dependencies": {
+    "ecs-core": "1.0.0",
+    "middleware-core": "1.0.0",
+    "middleware-elasticsearch": "1.0.0"
+  }
+}

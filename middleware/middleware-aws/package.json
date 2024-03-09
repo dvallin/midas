@@ -1,0 +1,12 @@
+{
+  "name": "middleware-aws",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "vitest",
+    "test:ci": "vitest run"
+  },
+  "dependencies": {
+    "middleware-core": "1.0.0",
+    "middleware-elasticsearch": "1.0.0"
+  }
+}

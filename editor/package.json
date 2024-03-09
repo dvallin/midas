@@ -1,0 +1,17 @@
+{
+  "name": "editor",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "vitest",
+    "test:ci": "vitest run"
+  },
+  "dependencies": {
+    "ecs-core": "1.0.0",
+    "middleware-core": "1.0.0",
+    "body-parser": "^1.20.2",
+    "pug": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/pug": "^2.0.10"
+  }
+}

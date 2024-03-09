@@ -2,7 +2,12 @@
   "name": "mira",
   "version": "0.0.1",
   "description": "typesafe middleware for about anything",
-  "type": "module",
+  "main": "editor/index.ts",
+  "workspaces": [
+    "ecs/*",
+    "middleware/*",
+    "editor"
+  ],
   "scripts": {
     "test": "TZ=UTC vitest",
     "test:ci": "vitest run",
@@ -15,11 +20,8 @@
     "@rollup/plugin-json": "^6.0.1",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@testcontainers/elasticsearch": "^10.2.2",
-    "@types/aws-lambda": "^8.10.124",
     "@types/elasticsearch": "^5.0.43",
     "@types/express": "^4.17.21",
-    "@types/pug": "^2.0.10",
-    "@types/uuid": "^9.0.7",
     "rollup": "^4.0.2",
     "rollup-plugin-typescript2": "^0.36.0",
     "testcontainers": "^10.2.1",
@@ -35,16 +37,8 @@
     "@aws-sdk/client-s3": "^3.428.0",
     "@aws-sdk/lib-dynamodb": "^3.437.0",
     "@elastic/elasticsearch": "^8.10.0",
-    "@pulumi/aws": "^6.13.1",
-    "@pulumi/awsx": "^2.3.0",
-    "@pulumi/pulumi": "^3.95.0",
     "@spaceteams/zap": "^0.3.3",
-    "aws-lambda": "^1.0.7",
-    "body-parser": "^1.20.2",
     "date-fns": "^2.30.0",
-    "express": "^4.18.2",
-    "nanoid": "^5.0.3",
-    "pug": "^3.0.2",
-    "uuid": "^9.0.1"
+    "express": "^4.18.2"
   }
 }
