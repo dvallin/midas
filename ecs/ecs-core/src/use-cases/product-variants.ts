@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { and, InferType, object, omit, record, string } from '@spaceteams/zap'
-import { component, service } from '..'
+import { ComponentStorage, UpdateStorage } from '../component'
+import { Importer, ZipImporter } from '../service'
 
 export const AttributesSchema = record(string())
 export const SkuSchema = object({
@@ -24,12 +25,12 @@ export type Product = InferType<typeof ProductSchema>
 
 export default function (
   provider: () => {
-    skus: component.ComponentStorage<Sku>
-    skuUpdates: component.UpdateStorage
-    variants: component.ComponentStorage<Variant>
-    variantUpdates: component.UpdateStorage
-    products: component.ComponentStorage<Product>
-    cursors: component.ComponentStorage<string>
+    skus: ComponentStorage<Sku>
+    skuUpdates: UpdateStorage
+    variants: ComponentStorage<Variant>
+    variantUpdates: UpdateStorage
+    products: ComponentStorage<Product>
+    cursors: ComponentStorage<string>
   },
 ) {
   describe('product-variants-usecase', () => {
@@ -53,7 +54,7 @@ export default function (
       })
 
       // when skus are updated we need to mix them into the product
-      await new service.Importer({
+      await new Importer({
         name: 'products-sku-update-importer',
         cursors,
         storage: skus,
@@ -66,7 +67,7 @@ export default function (
         await products.conditionalWrite(id, updated, product)
       })
       // when variants are updated we also need to mix them into the products
-      await new service.ZipImporter({
+      await new ZipImporter({
         name: 'products-variants-update-importer',
         cursors,
         storages: { variant: variants, product: products },

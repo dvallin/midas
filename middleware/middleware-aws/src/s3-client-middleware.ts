@@ -5,7 +5,7 @@ export type S3Context = { aws: { s3Client: S3Client } }
 export const s3ClientMiddleware = <C>(
   config: S3ClientConfig,
 ): ContextExtensionMiddleware<C, S3Context> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const client = new S3Client(config)
     try {
       const nextContext = mutableContext.lens(

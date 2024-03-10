@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { component, service } from '..'
+import { Linker, TreeLinker } from '../service'
+import { ComponentStorage, SetStorage } from '../component'
 
 export type Category = {
   parent?: string
@@ -7,9 +8,9 @@ export type Category = {
 }
 export default function (
   provider: () => {
-    categories: component.ComponentStorage<Category>
-    productToCategories: component.SetStorage<string>
-    categoryToProducts: component.SetStorage<string>
+    categories: ComponentStorage<Category>
+    productToCategories: SetStorage<string>
+    categoryToProducts: SetStorage<string>
   },
 ) {
   describe('product-categories-usecase', () => {
@@ -17,7 +18,7 @@ export default function (
       // given
       const { productToCategories, categoryToProducts } = provider()
 
-      const linker = new service.Linker(productToCategories, categoryToProducts)
+      const linker = new Linker(productToCategories, categoryToProducts)
       await linker.link('1', 'cat-1')
       await linker.link('2', 'cat-1')
       await linker.link('2', 'cat-2')
@@ -35,7 +36,7 @@ export default function (
       // given
       const { productToCategories, categoryToProducts } = provider()
 
-      const linker = new service.Linker(productToCategories, categoryToProducts)
+      const linker = new Linker(productToCategories, categoryToProducts)
       await linker.link('1', 'cat-1')
       await linker.unlink('1', 'cat-1')
 
@@ -58,9 +59,9 @@ export default function (
         name: 'cat-3',
       })
 
-      const linker = new service.TreeLinker(
+      const linker = new TreeLinker(
         categories,
-        new service.Linker(productToCategories, categoryToProducts),
+        new Linker(productToCategories, categoryToProducts),
       )
       await linker.link('1', 'cat-1')
       await linker.link('2', 'cat-3')
@@ -75,6 +76,5 @@ export default function (
       expect(await categoryToProducts.read('cat-2')).toEqual(['2'])
       expect(await categoryToProducts.read('cat-3')).toEqual(['2'])
     })
-    // TODO: removing products from subcategories. Could be implemented using reference counting.
   })
 }

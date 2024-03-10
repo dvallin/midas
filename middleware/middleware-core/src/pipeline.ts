@@ -2,41 +2,42 @@ import { Awaitable } from './awaitable'
 import { Middleware } from './middleware'
 
 export class Pipeline<
-  TEvent,
   TContext,
   TBaseContext = TContext,
-  TResult = never,
 > {
   constructor(private readonly stack: Middleware[]) {}
 
-  use<TNextResult, TNextContext = TContext>(
-    middleware: Middleware<TEvent, TNextResult, TNextContext, TContext>,
-  ): Pipeline<TEvent, TNextContext, TBaseContext, TNextResult | TResult> {
+  use<TNextContext>(
+    middleware: Middleware<TNextContext, TContext>,
+  ): Pipeline<TNextContext, TBaseContext> {
     return new Pipeline([...this.stack, middleware] as Middleware[])
   }
 
-  build(): (event: TEvent, context: TBaseContext) => Awaitable<TResult> {
-    return (event, context) => {
-      const traverse = <TResult>(
+  build(): (context: TBaseContext) => Awaitable<TContext> {
+    return (context) => {
+      const traverse = <TContext>(
         ctx: unknown,
         index: number,
-      ): Awaitable<TResult> => {
+      ): Awaitable<TContext> => {
         if (index < this.stack.length) {
           const currentMiddleware = this.stack[index]
-          return currentMiddleware(event, ctx, (c) => traverse(c, index + 1))
+          return currentMiddleware(
+            ctx,
+            (c) => traverse(c, index + 1),
+          ) as Awaitable<TContext>
         } else {
-          throw new Error('no middleware left in pipeline.')
+          return ctx as Awaitable<TContext>
         }
       }
       return traverse(context, 0)
     }
   }
 
-  run(event: TEvent, context: TBaseContext): Awaitable<TResult> {
-    return this.build()(event, context)
+  run(context: TBaseContext): Awaitable<TContext> {
+    return this.build()(context)
   }
 }
 
-export function pipeline<TEvent, TContext = Record<string, unknown>>() {
-  return new Pipeline<TEvent, TContext>([])
+export function pipeline<TContext = Record<string, unknown>>() {
+  return new Pipeline<TContext>([])
 }

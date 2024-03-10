@@ -1,6 +1,6 @@
 import { InferType, object, string } from '@spaceteams/zap'
-import { component } from '..'
 import { expect, it } from 'vitest'
+import { SearchStorage } from '../component'
 
 export const ProductSchema = object({
   ean: string(),
@@ -9,7 +9,7 @@ export const ProductSchema = object({
 type Product = InferType<typeof ProductSchema>
 
 type DataEntryContext = {
-  dataset: component.SearchStorage<Product>
+  dataset: SearchStorage<Product>
 }
 
 async function validateUniqueness(

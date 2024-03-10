@@ -1,29 +1,21 @@
 import { Awaitable } from '../awaitable'
 
 export type Middleware<
-  TEvent = unknown,
-  TResult = never,
   TContext = unknown,
   TBaseContext = TContext,
 > = (
-  event: TEvent,
   baseContext: TBaseContext,
   next: (context: TContext) => Awaitable<never>,
-) => Awaitable<TResult>
+) => Awaitable<TContext>
 
 export type ContextMappingMiddleware<
   TBaseContext,
   TContext,
-  TEvent = unknown,
-  TResult = never,
-> = Middleware<TEvent, TResult, TContext, TBaseContext>
+> = Middleware<TContext, TBaseContext>
 export type ContextExtensionMiddleware<
   TBaseContext,
   TContext,
-  TEvent = unknown,
-  TResult = never,
-> = Middleware<TEvent, TResult, TBaseContext & TContext, TBaseContext>
+> = Middleware<TBaseContext & TContext, TBaseContext>
 
 export * from './await-middleware'
 export * from './memoize-middleware'
-export * from './context-extract-middleware'

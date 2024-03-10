@@ -7,14 +7,21 @@
     "rules": {
       "tags": [
         "recommended"
+      ],
+      "include": [
+        "no-non-null-assertion",
+        "no-inferrable-types",
+        "no-console",
+        "guard-for-in",
+        "camelcase",
+        "ban-untagged-todo"
       ]
     }
   },
   "fmt": {
     "exclude": [
       "**/build",
-      "**/dist",
-      "packages/**/__snapshots__"
+      "**/dist"
     ],
     "semiColons": false,
     "singleQuote": true,

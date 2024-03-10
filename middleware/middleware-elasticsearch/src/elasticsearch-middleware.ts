@@ -7,7 +7,7 @@ export type ElasticsearchEndpointContext = {
 export const elasticsearchEndpointMiddleware = <C>(
   endpoint: string,
 ): ContextExtensionMiddleware<C, ElasticsearchEndpointContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const nextContext = mutableContext.lens(
       ctx,
       'elastic',
@@ -23,7 +23,7 @@ export type ElasticsearchContext = {
 export const elasticsearchMiddleware = <C extends ElasticsearchEndpointContext>(
   config: ClientOptions,
 ): ContextExtensionMiddleware<C, ElasticsearchContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const client = new Client({
       node: ctx.elastic.endpoint,
       headers: {

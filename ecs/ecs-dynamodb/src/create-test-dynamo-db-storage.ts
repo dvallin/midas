@@ -23,9 +23,9 @@ export function createTestDynamoDbStorage<
     .use(ecsBaseMiddleware(clusterId, components))
     .use(timeMiddleware(new MockTime()))
     .use(dynamoDbStorageContextMiddleware('TOTAL'))
-    .use((_e, c) => ({
+    .use((c) => ({
       context: c,
       storage: new DynamoDbStorage(c),
     }))
-    .run({}, {})
+    .run({})
 }

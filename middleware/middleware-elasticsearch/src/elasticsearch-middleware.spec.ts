@@ -6,13 +6,11 @@ import {
 } from './elasticsearch-middleware'
 
 it('creates client', async () => {
-  const run = pipeline<unknown, ElasticsearchEndpointContext>()
+  const run = pipeline<ElasticsearchEndpointContext>()
     .use(elasticsearchMiddleware({}))
-    .use((_e, c) => c)
     .build()
   const result = await run(
-    {},
-    { elastic: { endpoint: process.env.ELASTICSEARCH_ENDPOINT! } },
+    { elastic: { endpoint: process.env.ELASTICSEARCH_ENDPOINT ?? '' } },
   )
   expect(result.elastic.client).toBeDefined()
 })

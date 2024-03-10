@@ -1,12 +1,5 @@
-import {
-  ArrayStorage,
-  ComponentConfig,
-  InMemoryArrayStorage,
-} from '../../../ecs/ecs-core'
-import {
-  ContextExtensionMiddleware,
-  mutableContext,
-} from '../../../middleware/middleware-core'
+import { ArrayStorage, ComponentConfig, InMemoryArrayStorage } from 'ecs-core'
+import { ContextExtensionMiddleware, mutableContext } from 'middleware-core'
 import { Todo, TodoSchema } from '../model/todo'
 import pug from 'pug'
 
@@ -50,7 +43,7 @@ export const todoListStorageMiddleware = <
     }
   },
 >(): ContextExtensionMiddleware<C, TodoListStorageContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const nextContext = mutableContext.lens(
       ctx,
       'storages',
@@ -69,7 +62,7 @@ export const todoListViewsMiddleware = <C>(): ContextExtensionMiddleware<
   C,
   TodoListViewContext
 > => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const nextContext = mutableContext.lens(
       ctx,
       'views',

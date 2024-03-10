@@ -144,7 +144,6 @@ export class ElasticsearchSearchStorage<
   async suggest(key: keyof T, match: Partial<T>): Promise<string[]> {
     const response = await this.storage.prefix(this.componentName, key, match)
 
-    console.log(response.aggregations?.component)
     const result: string[] = []
     const aggregations = response.aggregations?.component as Record<
       string,

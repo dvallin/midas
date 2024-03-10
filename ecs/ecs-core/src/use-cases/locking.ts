@@ -1,18 +1,20 @@
 import { InferType, object, string } from '@spaceteams/zap'
-import { component, entity, service } from '..'
 import { expect, it } from 'vitest'
+import { ComponentStorage, ScheduleStorage } from '../component'
+import { EntityId } from '../entity'
+import { Updater } from '../service'
 
 export const LockSchema = object({ user: string() })
 export type Lock = InferType<typeof LockSchema>
 
 type LockingContext = {
-  locks: component.ComponentStorage<Lock>
-  lockReleases: component.ScheduleStorage
-  cursors: component.ComponentStorage<string>
+  locks: ComponentStorage<Lock>
+  lockReleases: ScheduleStorage
+  cursors: ComponentStorage<string>
 }
 
 export async function getLock(
-  entityId: entity.EntityId,
+  entityId: EntityId,
   user: string,
   { locks, lockReleases }: Pick<LockingContext, 'locks' | 'lockReleases'>,
 ) {
@@ -21,7 +23,7 @@ export async function getLock(
 }
 
 export async function hasLock(
-  entityId: entity.EntityId,
+  entityId: EntityId,
   user: string,
   { locks }: Pick<LockingContext, 'locks'>,
 ) {
@@ -30,7 +32,7 @@ export async function hasLock(
 }
 
 export async function releaseLock(
-  entityId: entity.EntityId,
+  entityId: EntityId,
   { locks, lockReleases }: Pick<LockingContext, 'locks' | 'lockReleases'>,
 ) {
   await lockReleases.erase(entityId)
@@ -38,7 +40,7 @@ export async function releaseLock(
 }
 
 async function releaseLockOfUser(
-  entityId: entity.EntityId,
+  entityId: EntityId,
   user: string,
   context: Pick<LockingContext, 'locks' | 'lockReleases'>,
 ) {
@@ -49,7 +51,7 @@ async function releaseLockOfUser(
 }
 
 export async function automaticLockRelease(context: LockingContext) {
-  await new service.Updater({
+  await new Updater({
     name: 'automaticLockRelease',
     cursors: context.cursors,
     updateStorage: context.lockReleases,

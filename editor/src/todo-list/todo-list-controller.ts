@@ -33,11 +33,14 @@ import { TodoSchema } from '../model/todo'
 import { defaultValue, object, optional, string } from '@spaceteams/zap'
 import { parseThrowing } from '../../../schema-parse'
 
-const defaultPipeline = pipeline<ExpressEvent, TodoListContext>()
+const defaultPipeline = pipeline<TodoListContext & ExpressEvent>()
 
-const parseFilter = <C>(): ExpressRequestParser<C, FilterRequest> => {
-  return ({ req }, ctx, next) => {
-    const { filter } = req.query
+const parseFilter = <C extends ExpressEvent>(): ExpressRequestParser<
+  C,
+  FilterRequest
+> => {
+  return (ctx, next) => {
+    const { filter } = ctx.req.query
     const parsedFilter = parseThrowing(
       defaultValue(optional(TodosFilterSchema), 'all'),
       filter,
@@ -51,9 +54,12 @@ const parseFilter = <C>(): ExpressRequestParser<C, FilterRequest> => {
   }
 }
 
-const parseListId = <C>(): ExpressRequestParser<C, ListIdRequest> => {
-  return ({ req }, ctx, next) => {
-    const { listId } = req.query
+const parseListId = <C extends ExpressEvent>(): ExpressRequestParser<
+  C,
+  ListIdRequest
+> => {
+  return (ctx, next) => {
+    const { listId } = ctx.req.query
     const parsedListId = parseThrowing(
       defaultValue(optional(string()), 'list-1'),
       listId,
@@ -67,9 +73,12 @@ const parseListId = <C>(): ExpressRequestParser<C, ListIdRequest> => {
   }
 }
 
-const parseTodoId = <C>(): ExpressRequestParser<C, TodoIdRequest> => {
-  return ({ req }, ctx, next) => {
-    const { id } = req.params
+const parseTodoId = <C extends ExpressEvent>(): ExpressRequestParser<
+  C,
+  TodoIdRequest
+> => {
+  return (ctx, next) => {
+    const { id } = ctx.req.params
     const nextContext = mutableContext.lens(
       ctx,
       'request',
@@ -79,12 +88,14 @@ const parseTodoId = <C>(): ExpressRequestParser<C, TodoIdRequest> => {
   }
 }
 
-const parseCreateNewTodoRequest = <C>(): ExpressRequestParser<
+const parseCreateNewTodoRequest = <
+  C extends ExpressEvent,
+>(): ExpressRequestParser<
   C,
   CreateNewTodoRequest
 > => {
-  return ({ req }, ctx, next) => {
-    const request = parseThrowing(object({ todo: string() }), req.body)
+  return (ctx, next) => {
+    const request = parseThrowing(object({ todo: string() }), ctx.req.body)
     const nextContext = mutableContext.lens(
       ctx,
       'request',
@@ -94,12 +105,12 @@ const parseCreateNewTodoRequest = <C>(): ExpressRequestParser<
   }
 }
 
-const parseUpdateTodoRequest = <C>(): ExpressRequestParser<
+const parseUpdateTodoRequest = <C extends ExpressEvent>(): ExpressRequestParser<
   C,
   UpdateTodoRequest
 > => {
-  return ({ req }, ctx, next) => {
-    const todo = parseThrowing(TodoSchema, req.body)
+  return (ctx, next) => {
+    const todo = parseThrowing(TodoSchema, ctx.req.body)
     const nextContext = mutableContext.lens(
       ctx,
       'request',
@@ -109,7 +120,7 @@ const parseUpdateTodoRequest = <C>(): ExpressRequestParser<
   }
 }
 
-export function register(app: Express, context: TodoListContext) {
+export function register(app: Express, context: TodoListContext): void {
   app.get(
     '/',
     toExpressHandler(

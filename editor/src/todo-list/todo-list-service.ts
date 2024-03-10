@@ -1,16 +1,15 @@
-import {
-  mutableContext,
-  ServiceMethod,
-} from '../../../middleware/middleware-core'
-import { v4 as uuid } from 'uuid'
-import { ReadBeforeWriteUpdate } from '../../../ecs/ecs-core'
+import { ContextExtensionMiddleware, mutableContext } from 'middleware-core'
+import { ReadBeforeWriteUpdate, UuidGenerator } from 'ecs-core'
 
 import { applyFilter, TodosFilter } from '../model/todo-filter'
 import { Todo, TodoSchema } from '../model/todo'
 import { TodoListContext } from './todo-list-context'
 import { parseThrowing } from '../../../schema-parse'
 
-type TodoListServiceMethod<In, Out> = ServiceMethod<In, Out, TodoListContext>
+type TodoListServiceMethod<In, Out> = ContextExtensionMiddleware<
+  In & TodoListContext,
+  Out
+>
 
 export type TodoIdRequest = { request: { id: string } }
 export type ListIdRequest = { request: { listId: string } }
@@ -24,7 +23,7 @@ export const loadTodoList = <C>(): TodoListServiceMethod<
   C & ListIdRequest,
   TodosContext
 > => {
-  return async (_, ctx, next) => {
+  return async (ctx, next) => {
     const todos = (await ctx.storages.todoList.read(ctx.request.listId)) ?? []
     const nextContext = mutableContext.mutate(ctx, 'todos', todos)
     return next(nextContext)
@@ -35,7 +34,7 @@ export const filterTodos = <C>(): TodoListServiceMethod<
   C & { todos: Todo[] } & FilterRequest,
   { todos: Todo[]; filter: TodosFilter }
 > => {
-  return (_, ctx, next) => {
+  return (ctx, next) => {
     const todos = applyFilter(ctx.todos, ctx.request.filter)
     const withTodos = mutableContext.mutate(ctx, 'todos', todos)
     const nextContext = mutableContext.mutate(
@@ -50,7 +49,7 @@ export const itemsLeft = <C>(): TodoListServiceMethod<
   C & { todos: Todo[] },
   { itemsLeft: number }
 > => {
-  return (_, ctx, next) => {
+  return (ctx, next) => {
     const itemsLeft = applyFilter(ctx.todos, 'active').length
     const nextContext = mutableContext.mutate(ctx, 'itemsLeft', itemsLeft)
     return next(nextContext)
@@ -61,7 +60,7 @@ export const findTodoById = <C>(): TodoListServiceMethod<
   C & { todos: Todo[] } & TodoIdRequest,
   { todo: Todo }
 > => {
-  return (_, ctx, next) => {
+  return (ctx, next) => {
     const { id } = ctx.request
     const todo = ctx.todos.find((t) => t.id === id)
     if (!todo) {
@@ -76,9 +75,10 @@ export const addTodo = <C>(): TodoListServiceMethod<
   C & CreateNewTodoRequest & ListIdRequest,
   { todo: Todo }
 > => {
-  return async (_, ctx, next) => {
+  return async (ctx, next) => {
+    const uuid = new UuidGenerator()
     const newTodo = parseThrowing(TodoSchema, {
-      id: uuid(),
+      id: uuid.generate(),
       name: ctx.request.todoName,
       done: false,
     })
@@ -94,7 +94,7 @@ const updateTodoList = <C extends ListIdRequest>(
     request: C['request'],
   ) => Todo[],
 ): TodoListServiceMethod<C, { todos: Todo[] }> => {
-  return async (_, ctx, next) => {
+  return async (ctx, next) => {
     const { component: todos } = await new ReadBeforeWriteUpdate(
       ctx.storages.todoList,
     ).update(ctx.request.listId, (todos) => updater(todos, ctx.request))

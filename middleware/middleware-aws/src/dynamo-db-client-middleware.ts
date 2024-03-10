@@ -8,7 +8,7 @@ export type DynamoDbContext = {
 export const dynamoDbClientMiddleware = <C>(
   config: DynamoDBClientConfig,
 ): ContextExtensionMiddleware<C, DynamoDbContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const client = new DynamoDBClient(config)
     try {
       const nextContext = mutableContext.lens(

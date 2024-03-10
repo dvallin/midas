@@ -1,5 +1,4 @@
 import { describe, it } from 'vitest'
-import { component } from '..'
 import {
   array,
   discriminatedUnion,
@@ -9,6 +8,7 @@ import {
   object,
   string,
 } from '@spaceteams/zap'
+import { ArrayStorage, ComponentStorage, ReadBeforeWriteUpdate } from '../component'
 
 export const CartItemSchema = object({
   productId: string(),
@@ -31,15 +31,15 @@ export type CartEvent = InferType<typeof CartEventSchema>
 
 export default function (
   provider: () => {
-    carts: component.ComponentStorage<Cart>
-    cartEvents: component.ArrayStorage<CartEvent>
+    carts: ComponentStorage<Cart>
+    cartEvents: ArrayStorage<CartEvent>
   },
 ) {
   describe('simple shopping cart usecase', () => {
     it('uses read-before write', async () => {
       const { carts } = provider()
 
-      await new component.ReadBeforeWriteUpdate(carts).update('1', (cart) => ({
+      await new ReadBeforeWriteUpdate(carts).update('1', (cart) => ({
         items: [...(cart?.items ?? []), { productId: 'product1', quantity: 1 }],
       }))
     })

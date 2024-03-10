@@ -18,14 +18,14 @@ it('imports', async () => {
 
   const imported = new InMemoryComponentStorage<string>()
   await importer.runImport((entityId, component) =>
-    imported.write(entityId, component!)
+    imported.write(entityId, component ?? '')
   )
 
   expect(imported.size).toEqual(storage.size)
   expect(imported.data[1].component).toEqual('component-1')
   expect(imported.data[2].component).toEqual('component-2')
   expect(imported.data[3].component).toEqual('component-3')
-  expect(parseInt(cursors.data.test.component)).toBeGreaterThan(0)
+  expect(parseInt(cursors.data.test.component ?? '')).toBeGreaterThan(0)
 })
 
 it('imports only once', async () => {
@@ -38,10 +38,10 @@ it('imports only once', async () => {
 
   const imported = new InMemoryComponentStorage<string>()
   await importer.runImport((entityId, component) =>
-    imported.write(entityId, component!)
+    imported.write(entityId, component ?? '')
   )
   await importer.runImport((entityId, component) =>
-    imported.write(entityId, component!)
+    imported.write(entityId, component ?? '')
   )
 
   expect(imported.size).toEqual(storage.size)

@@ -76,8 +76,7 @@ export const ecsBaseMiddleware = <
   // not any base context but the one with these components
   EcsBaseContext<Components>
 > => {
-  return async (_e, ctx, next) => {
-    console.log('build base context')
+  return async (ctx, next) => {
     const c = ctx as Record<string, unknown>
     c.clusterId = clusterId
     c.components = components

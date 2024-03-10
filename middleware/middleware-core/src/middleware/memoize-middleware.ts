@@ -1,12 +1,12 @@
 import { Middleware } from '.'
 
-export const memoizeMiddleware = <E, R, C, B>(
-  middleware: Middleware<E, R, C, B>,
-): Middleware<E, R, C, B> => {
+export const memoizeMiddleware = <C, B>(
+  middleware: Middleware<C, B>,
+): Middleware<C, B> => {
   let memoized: C | undefined = undefined
-  return (e, context, next) => {
+  return (context, next) => {
     if (!memoized) {
-      return middleware(e, context, (c) => {
+      return middleware(context, (c) => {
         memoized = c
         return next(c)
       })

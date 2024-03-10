@@ -45,7 +45,7 @@ export const elasticsearchStorageContextMiddleware = <
   C,
   ElasticsearchStorageContext<InferComponents<C>>
 > => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const c = ctx as { storage?: Record<string, unknown> }
     if (!c.storage) {
       c.storage = {}
@@ -320,7 +320,6 @@ export class ElasticsearchStorage<
         mappings: {
           properties: {
             lastModified: { type: 'double' },
-            // TODO: infer from type and schema. Add support for meta information
             component: schema
               ? this.mappingPropertyFromSchema(schema)
               : { type: 'keyword' },

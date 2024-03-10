@@ -15,7 +15,7 @@ export type TimeContext = {
 export const timeMiddleware = <C>(
   instance: Time = new Time(),
 ): ContextExtensionMiddleware<C, TimeContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const c = ctx as { service?: Record<string, unknown> }
     if (!c.service) {
       c.service = {}

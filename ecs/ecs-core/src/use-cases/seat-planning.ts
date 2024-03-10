@@ -1,6 +1,7 @@
 import { array, InferType, object, string } from '@spaceteams/zap'
-import { component, service } from '..'
 import { expect, it } from 'vitest'
+import { ComponentStorage, ReadBeforeWriteUpdate, ScheduleStorage, SetStorage } from '../component'
+import { Updater } from '../service'
 
 const SoldSeatSchema = object({
   userId: string(),
@@ -11,15 +12,15 @@ export const BasketSchema = object({ planId: string(), seats: array(string()) })
 export type Basket = InferType<typeof BasketSchema>
 
 type SeatPlanContext = {
-  soldSeats: component.ComponentStorage<SoldSeat>
+  soldSeats: ComponentStorage<SoldSeat>
 
-  reservedSeatOverview: component.SetStorage<string>
-  soldSeatOverview: component.SetStorage<string>
+  reservedSeatOverview: SetStorage<string>
+  soldSeatOverview: SetStorage<string>
 
-  baskets: component.ComponentStorage<Basket>
-  basketReleases: component.ScheduleStorage
+  baskets: ComponentStorage<Basket>
+  basketReleases: ScheduleStorage
 
-  cursors: component.ComponentStorage<string>
+  cursors: ComponentStorage<string>
 }
 
 async function reserveSeats(
@@ -30,7 +31,7 @@ async function reserveSeats(
 ) {
   await context.reservedSeatOverview.conditionalSetAdd(planId, ...seatIds)
   try {
-    await new component.ReadBeforeWriteUpdate(context.baskets).update(
+    await new ReadBeforeWriteUpdate(context.baskets).update(
       user,
       (basket) => ({
         planId,
@@ -56,7 +57,7 @@ async function submitBasket(userId: string, context: SeatPlanContext) {
 }
 
 async function automaticReservedLockRelease(context: SeatPlanContext) {
-  await new service.Updater({
+  await new Updater({
     name: 'automaticLockRelease',
     cursors: context.cursors,
     updateStorage: context.basketReleases,

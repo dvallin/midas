@@ -11,7 +11,7 @@ export const awaitMiddleware = <C, K extends keyof C>(
     [key in Exclude<keyof C, K>]: C[key]
   }
 > =>
-async (_e, context, next) => {
+async (context, next) => {
   for (const key of keys) {
     const value = context[key]
     if (value instanceof Promise) {

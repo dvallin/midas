@@ -51,7 +51,7 @@ export const dynamoDbStorageContextMiddleware = <
   C,
   DynamoDbStorageContext<InferComponents<C>>
 > => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const c = ctx as { storage?: Record<string, unknown> }
     if (!c.storage) {
       c.storage = {}
@@ -936,7 +936,7 @@ export class DynamoDbStorage<
           AttributeName: 'component',
           AttributeType: 'S',
         })
-        primaryTable.GlobalSecondaryIndexes!.push({
+        primaryTable.GlobalSecondaryIndexes.push({
           IndexName: `${primaryTable.TableName}_key_index`,
           KeySchema: [{ AttributeName: 'component', KeyType: 'HASH' }],
           Projection: {
@@ -959,7 +959,7 @@ export class DynamoDbStorage<
           AttributeName: 'scheduleDate',
           AttributeType: 'S',
         })
-        primaryTable.GlobalSecondaryIndexes!.push({
+        primaryTable.GlobalSecondaryIndexes.push({
           IndexName: `${primaryTable.TableName}_schedule_index`,
           KeySchema: [
             { AttributeName: 'scheduleDate', KeyType: 'HASH' },
@@ -987,7 +987,7 @@ export class DynamoDbStorage<
           AttributeName: 'lastModifiedDate',
           AttributeType: 'S',
         })
-        primaryTable.GlobalSecondaryIndexes!.push({
+        primaryTable.GlobalSecondaryIndexes.push({
           IndexName: `${primaryTable.TableName}_update_index`,
           KeySchema: [
             { AttributeName: 'lastModifiedDate', KeyType: 'HASH' },

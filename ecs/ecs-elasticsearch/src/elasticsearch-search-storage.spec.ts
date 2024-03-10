@@ -1,12 +1,11 @@
 import { ElasticsearchSearchStorage } from './elasticsearch-search-storage'
 import { ElasticsearchUpdateStorage } from './elasticsearch-update-storage'
-import componentStorageSpec from '../component-storage-spec'
-import { pipeline } from '../../../pipeline'
-import { timeMiddleware } from '../../service/time'
+import componentStorageSpec from 'ecs-core/src/component/component-storage-spec'
+import { pipeline } from 'middleware-core'
 import {
   elasticsearchEndpointMiddleware,
   elasticsearchMiddleware,
-} from '../../../middleware/elasticsearch/elasticsearch-middleware'
+} from 'middleware-elasticsearch'
 import { afterAll, beforeAll } from 'vitest'
 import {
   ElasticsearchStorage,
@@ -16,9 +15,10 @@ import {
   componentConfig,
   componentStorageConfig,
   ecsBaseMiddleware,
-} from '../..'
+  timeMiddleware,
+} from 'ecs-core'
 import { string } from '@spaceteams/zap'
-import dataEntrySpec, { ProductSchema } from '../../use-cases/data-entry'
+import dataEntrySpec, { ProductSchema } from 'ecs-core/src/use-cases/data-entry'
 
 const storage = await pipeline()
   .use(
@@ -38,11 +38,13 @@ const storage = await pipeline()
     }),
   )
   .use(timeMiddleware())
-  .use(elasticsearchEndpointMiddleware(process.env.ELASTICSEARCH_ENDPOINT!))
+  .use(
+    elasticsearchEndpointMiddleware(process.env.ELASTICSEARCH_ENDPOINT ?? ''),
+  )
   .use(elasticsearchMiddleware({}))
   .use(elasticsearchStorageContextMiddleware(true))
-  .use((_e, c) => new ElasticsearchStorage(c))
-  .run({}, {})
+  .use((c) => new ElasticsearchStorage(c))
+  .run({})
 
 beforeAll(() => storage.migrate())
 afterAll(() => storage.teardown())

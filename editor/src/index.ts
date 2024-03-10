@@ -1,10 +1,7 @@
 import bodyParser from 'body-parser'
 import express from 'express'
-import { ecsBaseMiddleware } from '../../ecs/ecs-core'
-import {
-  contextExtractMiddleware,
-  pipeline,
-} from '../../middleware/middleware-core'
+import { ecsBaseMiddleware } from 'ecs-core'
+import { pipeline } from 'middleware-core'
 import {
   todoListComponents,
   todoListStorageMiddleware,
@@ -13,7 +10,7 @@ import {
 import { register as registerTodoListController } from './todo-list/todo-list-controller'
 
 async function run() {
-  const context = await pipeline<unknown, unknown>()
+  const context = await pipeline()
     .use(
       ecsBaseMiddleware('todo-mvc-cluster', {
         ...todoListComponents,
@@ -21,8 +18,7 @@ async function run() {
     )
     .use(todoListStorageMiddleware())
     .use(todoListViewsMiddleware())
-    .use(contextExtractMiddleware())
-    .run({}, {})
+    .run({})
 
   const app = express()
   app.set('view engine', 'pug')
@@ -34,7 +30,6 @@ async function run() {
 
   const PORT = process.env.PORT || 3000
   app.listen(PORT)
-  console.log('Listening on port: ' + PORT)
 }
 
 run()

@@ -16,7 +16,7 @@ export type ElasticsearchServiceContext = {
 export const elasticsearchServiceMiddleware = <C>(
   config: ElasticsearchServiceClientConfig,
 ): ContextExtensionMiddleware<C, ElasticsearchServiceContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const client = new ElasticsearchServiceClient(config)
     try {
       const nextContext = mutableContext.lens(
@@ -37,7 +37,7 @@ export const elasticsearchDomainMiddleware = <
 >(
   domainName: string,
 ): ContextExtensionMiddleware<C, ElasticsearchEndpointContext> => {
-  return async (_e, ctx, next) => {
+  return async (ctx, next) => {
     const domainNames = await ctx.aws.elasticsearchServiceClient.send(
       new ListDomainNamesCommand({}),
     )
